@@ -1,0 +1,1 @@
+{"api_version": "1.0", "name": "群卡片提醒示例", "description": "发现群公告、投票、接龙时提醒核对卡片，完全本机运行，不发送消息。", "entry": "extension.py", "permissions": ["read_context"]}

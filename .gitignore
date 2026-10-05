@@ -1,0 +1,30 @@
+__pycache__/
+*.pyc
+*.pyo
+
+# 私人数据与运行时（绝不提交）
+*.dpapi
+*.sqlite3
+*.jsonl
+*.log
+.dsh-junshi*
+private-data-backup/
+dev-data/
+test-data/
+backups/
+
+# 大型二进制与第三方运行时（不随源码提交）
+models/
+packages/
+runtime/
+harness-runtime/
+media-runtime/
+*.exe
+*.dll
+*.pyd
+
+# 系统与编辑器
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
