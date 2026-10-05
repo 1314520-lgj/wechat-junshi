@@ -41,9 +41,20 @@ licenses/           第三方组件许可
 
 ## 运行
 
-本仓库是军师的**开发包**（引擎源码 + 面板 + SDK + 技能 + 文档）。桌面安装包内置 Python 3.12 运行时与第三方依赖（见 `DEPENDENCIES.json`）；在已有安装上更新：把本仓库内容覆盖到安装目录（默认 `%LOCALAPPDATA%\Programs\Junshi`），运行其中的 `launcher.py` 即可。
+**从源码运行**（Windows 10/11 + Python 3.12）：
 
-从头运行所需环境：Python 3.12、numpy、opencv、rapidocr-onnxruntime、windows-capture、Pillow、faster-whisper 等（版本见依赖目录 METADATA 或 `DEPENDENCIES.json`）；本地 Ollama 与 `qwen3-vl:2b`；DeepSeek API 密钥（在应用设置中填入，DPAPI 加密保存）。
+```powershell
+git clone https://github.com/1314520-lgj/wechat-junshi.git
+cd wechat-junshi
+pip install -r requirements.txt
+python -X utf8 launcher.py
+```
+
+设置：在面板设置里填入 DeepSeek API 密钥（DPAPI 加密保存）；媒体理解需安装 [Ollama](https://ollama.com) 并执行 `ollama pull qwen3-vl:2b`；可选 Harness 调度需要官方 `deepseek-harness-sdk==0.1.5rc1`（未发布到 PyPI），不装也能正常使用。
+
+桌面安装包内置 Python 3.12 运行时与全部依赖，但不随本仓库分发；本仓库是完整应用源码（开发包）。在已有安装上升级：把本仓库内容覆盖到安装目录（默认 `%LOCALAPPDATA%\Programs\Junshi`）后运行 `launcher.py`。
+
+> English README: [README.en.md](README.en.md)
 
 ## 安全与隐私
 
@@ -56,3 +67,11 @@ licenses/           第三方组件许可
 ## 免责声明
 
 本应用仅用于个人学习与辅助表达。使用前请确认符合微信相关条款、当地法律法规以及你所在群聊的知情边界；建议在启用读取前告知对方。发送行为始终由你本人决定。
+
+## 许可证
+
+[MIT](LICENSE) © 2026 wechat-junshi contributors。第三方组件保留各自许可证（见 `licenses/`）。
+
+---
+
+问题与建议请在 [Issues](https://github.com/1314520-lgj/wechat-junshi/issues) 提出，欢迎 PR 与 Star。
