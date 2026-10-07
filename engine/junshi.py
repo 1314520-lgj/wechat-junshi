@@ -1198,7 +1198,7 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"ok": False, "error": "unauthorized"}, 401)
             return
         if self.command == 'GET' and path == '/capabilities':
-            self._json({'ok':True,'api_version':'1.0','app_version':'1.5.68','tools':['state','participants','analyze-text','cancel-manual','regenerate','settings','extensions','vision-models','fill','models','evidence','correct-message','uia','memory-confirm','media-file','media-job','attach-media','verify-extension'], 'evidence_api_version':'1.1', 'sends_messages':False});return
+            self._json({'ok':True,'api_version':'1.0','app_version':'1.5.69','tools':['state','participants','analyze-text','cancel-manual','regenerate','settings','extensions','vision-models','fill','models','evidence','correct-message','uia','memory-confirm','media-file','media-job','attach-media','verify-extension'], 'evidence_api_version':'1.1', 'sends_messages':False});return
         if self.command == 'POST' and path == '/cancel-manual':
             identity=self._body().get('request_id')
             if not isinstance(identity,str) or not identity.strip() or len(identity)>80:raise ValueError('请求编号无效')

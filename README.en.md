@@ -4,6 +4,8 @@ Junshi is a Windows desktop assistant that **observes** the currently visible We
 
 > Not an auto-reply bot. Junshi's goal: understand the context, sound like you, and leave the choice to you.
 
+Current version: **1.5.69**. The interface adapts to window width and height, switches between columns and a stacked layout, keeps drafts while resizing, and keeps the settings close button reachable. See [release notes](docs/1.5.69.md) (Chinese).
+
 ## Highlights
 
 - **Screen reading**: captures the WeChat window via Windows Graphics Capture (PrintWindow fallback) and recognizes message text with RapidOCR. The message area is located by pixel anchors — works across light/dark themes and window sizes.
@@ -52,14 +54,20 @@ python -X utf8 launcher.py
 
 Setup: enter a DeepSeek API key in the settings panel (stored with Windows DPAPI). For media understanding, install [Ollama](https://ollama.com) and run `ollama pull qwen3-vl:2b`. The optional Harness scheduler needs the official `deepseek-harness-sdk==0.1.5rc1` (not on PyPI); everything works without it.
 
-A prebuilt desktop installer exists but is not part of this repository; this repo is the full application source (dev package). To update an installed copy, overwrite the install directory (`%LOCALAPPDATA%\Programs\Junshi`) with this repository.
+Speech transcription additionally requires the local `models/whisper-small` model files, including `model.bin`; installing the Python package does not supply those weights. Missing media evidence stays unknown.
+
+A prebuilt desktop installer exists but is not part of this repository; this repo is the full application source (dev package). To update an installed copy, quit Junshi through its settings, back up the install directory (`%LOCALAPPDATA%\Programs\Junshi`), and update the corresponding source files while retaining the runtime, models and user data.
+
+## Layout checks
+
+With Node.js 20 or newer, run `npm install`, `npx playwright install chromium`, then `npm run test:layout`. Tests use synthetic conversations and a mocked service; they do not contact WeChat or any model provider.
 
 ## Security & privacy
 
 - The engine listens on `127.0.0.1` only (exclusive port bind), requires an instance token + Host/Origin checks, and sends no CORS headers.
 - API keys and user-confirmed memory are encrypted with Windows DPAPI; the observation database itself is not encrypted (7-day retention, 20k cap).
 - Cloud models only ever receive the chat text that participates in an analysis; vision runs locally by default.
-- There is no send endpoint; automatic fill is intentionally disabled because the latest-message position cannot be reliably verified for this WeChat version.
+- There is no send endpoint; automatic fill has been removed; explicit copy and manual fill remain available.
 - Never commit `private-data-backup`, Harness session logs, or any `.dpapi` / `.sqlite3` files (covered by `.gitignore`).
 
 ## Disclaimer

@@ -1,0 +1,15 @@
+{
+  "name": "wechat-junshi-layout-checks",
+  "version": "1.5.69",
+  "private": true,
+  "description": "Synthetic layout checks for the Junshi web panel; no production Node dependency",
+  "scripts": {
+    "test:layout": "node tests/test_responsive.cjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1"
+  }
+}

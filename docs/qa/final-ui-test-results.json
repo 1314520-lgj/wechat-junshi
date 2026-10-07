@@ -1,0 +1,24 @@
+{
+  "passed": true,
+  "checks": 15,
+  "details": [
+    "rapid preference clicks issue one save",
+    "preference save scoped to clicked contact",
+    "preferences disabled while saving",
+    "no duplicate forced generation",
+    "saving preference preserves edited reply",
+    "late save cannot change other contact",
+    "late contact save visibly rejected",
+    "manual ready before disconnect",
+    "disconnect disables new analysis",
+    "disconnect preserves transcript",
+    "reconnect restores analyze",
+    "contact persistence failure visibly explained",
+    "failed relationship save rolls visible control back",
+    "all UI changes use no model request",
+    "no JS errors"
+  ],
+  "synthetic_data_only": true,
+  "no_wechat_actions": true,
+  "no_model_calls": true
+}

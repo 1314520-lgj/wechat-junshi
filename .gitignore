@@ -28,3 +28,8 @@ media-runtime/
 Thumbs.db
 .idea/
 .vscode/
+
+# UI development checks
+node_modules/
+test-results/
+playwright-report/
