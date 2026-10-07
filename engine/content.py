@@ -1,4 +1,5 @@
 """Conservative message types and group speaker records (no account-ID claims)."""
+from emoji_context import emoji_only, context_notes
 import hashlib
 import re
 from urllib.parse import urlsplit
@@ -76,6 +77,25 @@ def card_reply_guard(text,own,messages=()):
     money=any(m.get('kind') in ('transfer','red_packet') for m in messages if isinstance(m,dict))
     if money and text not in own:
         latest=next((m for m in reversed(messages) if isinstance(m,dict) and reply_target(m)),{})
+        # Completed receipt can be phrased without the original '领了红包'
+        # spelling. Questions, negation and an actual own statement still pass.
+        completed=r'领到(?:了红包|红包了)|红包.{0,8}(?:领到了|领取成功)|(?:收款|领取|转账|付款)成功(?:了)?'
+        if latest.get('kind') in ('transfer','red_packet'):
+            completed+=r'|(?:我)?(?:已经|已|刚刚|刚)(?:领取|收款)(?=[，,。；;！!？?\s]|$)|(?:我)?(?:已经|已|刚刚|刚)?(?:领取了|领到了|领了|收了)(?=[，,。；;！!？?\s]|$)'
+        for claim in re.finditer(completed,text):
+            left=max(text.rfind(c,0,claim.start()) for c in '，,。；;！!')+1
+            endings=[text.find(c,claim.end()) for c in '，,。；;！!']
+            right=min((x for x in endings if x>=0),default=len(text))
+            clause=text[left:right]
+            if re.search(r'[?？]|吗|是否|有没有',clause):continue
+            action=re.search(r'领到|领取|收款|转账|付款|领了|收了',claim.group(0))
+            action_start=claim.start()+action.start()
+            before=text[max(left,action_start-8):action_start]
+            if re.search(r'如果|假如|要是|倘若|等(?:我|你|他|她)?',text[left:action_start]):continue
+            if not claim.group(0).startswith('我') and re.search(r'(?:你|他|她)(?:已经|已|刚刚|刚)?$',before):continue
+            if re.search(r'(?:不|没|未|别|不要|还没|尚未)(?:会|要|能|想|我|再|了|曾|有){0,6}$',before):continue
+            supported=any(claim.group(0) in unit and not re.search(r'没有|没|未|不|[?？]|吗|是否|^你|^他|^她',unit.strip()) for unit in re.split(r'[，,。；;！!\n]',own))
+            if not supported:return False
         money_pattern=r'(?:这|那|这笔|那笔)?钱.{0,6}我.{0,6}(?:存着|存下|收下)|我.{0,6}(?:先)?(?:把)?(?:这|那|这笔|那笔)?钱.{0,4}(?:存着|存下|收下)'
         if latest.get('kind') in ('transfer','red_packet'):money_pattern+=r'|我.{0,6}(?:存着|存下|收下)'
         for claim in re.finditer(money_pattern,text):
@@ -105,6 +125,8 @@ def context_limits(messages):
         notes.append('入口仅是预览；没有正文时只回应标题或问内容，不评价文章好坏，不说已读或已打开。')
     if kinds & {'sticker','emoji'}:
         notes.append('表情结合前文理解，不固定判断情绪；任务通知配表情仍不是本人已答应完成任务。')
+    emoji_notes=context_notes(messages)
+    if emoji_notes:notes.append(emoji_notes)
     return ' '.join(notes)
 
 def reply_target(message):
@@ -122,7 +144,7 @@ def classify(text,card=False):
     if re.search(r'^(?:群投票|投票(?:$|[：:]))',text) or ('投票' in text and any(k in text for k in ('单选','多选','截止','参与','选项','票数'))):return 'poll'
     if re.search(r'^(?:群接龙|接龙(?:$|[：:]))',text) or ('接龙' in text and (re.search(r'(?:^|\n)\s*\d+[.、\s]',text) or any(k in text for k in ('参与接龙','接龙统计','填写接龙')))):return 'relay'
     if re.search(r'邀请.{0,30}加入群聊|通过扫描.{1,120}加入群聊|撤回了一条消息|修改了群名|加入了群聊|你已添加',text):return 'system'
-    if re.fullmatch(r'(?:\[[^\]\n]{1,12}\]|[\U0001f000-\U0001faff\u2600-\u27bf\ufe0f\u200d])+',text):return 'emoji'
+    if emoji_only(text):return 'emoji'
     return 'text'
 
 def speaker_key(session,name):

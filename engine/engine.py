@@ -24,6 +24,10 @@ def _usage_snapshot():
             'cost_reserved':route.get('cost_reserved',0.0),
             'draft_attempts':route.get('draft_attempts',0)}
 
+def calls_available(needed):
+    route=modelrouter.current()
+    return route is None or route['settings'].get('max_model_calls',6)-route['calls']>=needed
+
 
 def needs_context_judgment(messages):
     """Extra interpretation requires usable evidence, not a placeholder alone.
@@ -95,11 +99,13 @@ def _analyze_impl(messages: list, relationship: str, api_key: str,
     from vision import understand
     from extensions import run_hooks
     messages=annotate(messages,settings.get('_session',''))
+    from replyscope import resolve_target,target_context
+    reply_to=resolve_target(messages[-context:],reply_to)
     partial=None
     callback=settings.get('_on_partial')
     media_pending=any(media_unresolved(m) for m in messages[-context:])
     from content import reply_target
-    latest=next((m for m in reversed(messages[-context:]) if reply_target(m)),{})
+    latest=next((m for m in reversed(target_context(messages[-context:],reply_to)) if reply_target(m)),{})
     route=modelrouter.current()
     enough_budget=not route or route['settings'].get('max_model_calls',6)-route['calls']>=5
     eligible=callback and not settings.get('_preliminary') and settings.get('vision_enabled') and media_pending and enough_budget and not settings.get('enabled_extensions') and latest.get('kind')=='text' and len(latest.get('text',''))>=4 and not re.search(r'这张图|这个视频|图片里|看图|语音|截图|这是什么',latest.get('text',''))
@@ -109,16 +115,16 @@ def _analyze_impl(messages: list, relationship: str, api_key: str,
         partial['media_pending']=True;partial['completion_stage']='text_verified_media_pending'
         partial['warnings']+=['仅文字建议已核验；媒体理解仍在进行，内容未知，尚未完成全部分析']
         modelrouter.check();callback(partial)
-        # 视觉之后至少还要 判断+起草+核验+排序 = 4 次调用；只留 3 次会在核验/排序
-        # 阶段触发 reserve 的 TimeoutError（except LlmError 接不住），整次分析白算。
-        settings={**settings,'_vision_leave_calls':4}
+        # Draft + integrated review are mandatory. Extra interpretation is
+        # optional and must never consume the calls reserved for this pair.
+        settings={**settings,'_vision_leave_calls':2}
     recent,vision_warnings=understand(messages[-context:],settings,vision_key,notify)
     reusable=bool(partial and reply_evidence_signature(recent)==reply_evidence_signature(messages[-context:]))
     if reusable:
         from replycheck import usable,grounded
         # A new uncertainty flag can change grounding even when no new facts
         # were obtained. Never skip these independent checks for reused text.
-        reusable=bool(partial.get('review_ok') and partial.get('candidates') and all(usable(c) and grounded(c,recent) for c in partial['candidates']))
+        reusable=bool(partial.get('review_ok') and partial.get('candidates') and all(usable(c) and grounded(c,target_context(recent,reply_to)) for c in partial['candidates']))
     if reusable:
         # The text was reviewed already. A thumbnail or another uncertain
         # observation adds UI evidence, but does not add facts to redraft from.
@@ -138,12 +144,12 @@ def _analyze_impl(messages: list, relationship: str, api_key: str,
     judge_prompt = build_judge_prompt(state, memory)
     system = judge_prompt["system"] + ("\n" + JUDGE_LAYER if junshi_layer else "")
     try:
-        if not complex_scene:raise LlmError("ordinary text uses direct drafting")
+        if not complex_scene or not calls_available(3):raise LlmError("core drafting and review have priority")
         content = chat(api_key, system, [judge_prompt["user"]], model=judge,
                        temperature=0.3, max_tokens=1200, thinking=False, timeout=timeout)
         answers = parse_judgment(content)
         judged = bool(answers)
-        if not judged:
+        if not judged and calls_available(3):
             # 重试一次，提示只输出 JSON
             content = chat(api_key, system,
                            [judge_prompt["user"], content, "只输出一个 JSON 对象，别的都不要。"],
@@ -168,13 +174,13 @@ def _analyze_impl(messages: list, relationship: str, api_key: str,
 
     notify("checking")
     try:
-        candidates = review(messages[-context:], candidates, api_key, judge, timeout)
+        candidates = review(messages[-context:], candidates, api_key, judge, timeout, relationship=relationship, style=style,**({'reply_to':reply_to} if reply_to else {}))
     except TimeoutError:
         raise LlmError("预算不足，回复核验未完成，请重试")
     integrated_index=getattr(candidates,"best_index",None)
     notify("ranking")
     scores = [0.0, 0.0, 0.0]
-    if len(candidates) >= 2 and complex_scene and integrated_index is None:
+    if len(candidates) >= 2 and complex_scene and integrated_index is None and calls_available(1):
         try:
             rp = build_rank_prompt(state, candidates)
             content = chat(api_key, rp["system"], [rp["user"]], model=judge,
@@ -292,6 +298,9 @@ def _analyze_uncached(*args, **kwargs):
         result['draft_diagnostics']=route.get('draft_diagnostics',[])
         result['cache_hit']=False
         result['usage']=_usage_snapshot()
+        # Newly understood exact crops can now supply a safe cache key for the
+        # original observation. Repeated clicks need not redraft this result.
+        if cache_key is None:cache_key=replycache.key_for(_analyze_impl,args,kwargs,home)
         replycache.put(cache_key,result)
         return result
 

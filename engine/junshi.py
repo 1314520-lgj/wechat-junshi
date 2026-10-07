@@ -124,7 +124,6 @@ DEFAULT_CONFIG = {
     "wechat_path": r"D:\Weixin\Weixin.exe",
     "auto_launch": False,
     "paused": True,
-    "auto_fill": False,
     "vision_enabled": False,
     "vision_keep_alive_minutes": 5,
     "vision_base": "http://127.0.0.1:11434/v1",
@@ -150,13 +149,11 @@ STATE = {
     "layout_metrics": {},
     "uia_snapshot": {},
     "title_ready": False,
-    "auto_fill_status": "已开启；等待可靠的最新消息位置证据，自动填入暂被保护拦截" if CONFIG.get("auto_fill") else "关闭",
-    "auto_fill_last": None,
-    "latest_position_witness": None,
     "recognition_phase": "waiting",
     "analysis_phase": "idle",
     "analysis_started": 0,
     "manual_phase": "idle",
+    "manual_phase_request": None,
     "manual_preview": None,
     "media_jobs": {},
     "session": "",
@@ -218,7 +215,6 @@ def load_config():
             with _lock:
                 for k, v in validate_settings(data).items():
                     CONFIG[k] = v
-                STATE['auto_fill_status']='已开启；等待可靠的最新消息位置证据，自动填入暂被保护拦截' if CONFIG.get('auto_fill') else '关闭'
     except FileNotFoundError:
         pass
     except Exception as e:
@@ -304,40 +300,42 @@ def restore_contact_preferences(name):
                 CONFIG[key] = saved[key]
 
 
-def save_config(patch=None):
-    global CONFIG
-    changed = set()
+def save_config(patch=None,expected_session=None):
+    changed=set();contact_saved=True
     with _lock:
+        if expected_session is not None and (not isinstance(expected_session,str) or STATE["session"]!=expected_session):
+            raise ValueError("会话已经切换，请在当前联系人下重新选择偏好")
+        data=dict(CONFIG)
         if patch:
-            patch = validate_settings(patch)
-            for k, v in patch.items():
-                if k in DEFAULT_CONFIG and v is not None:
-                    if CONFIG.get(k) != v:
-                        changed.add(k)
-                    CONFIG[k] = v
-        if 'auto_fill' in changed:
-            STATE['auto_fill_status']='已开启；等待可靠的最新消息位置证据，自动填入暂被保护拦截' if CONFIG.get('auto_fill') else '关闭'
-        data = dict(CONFIG)
+            for key,value in validate_settings(patch).items():
+                if key in DEFAULT_CONFIG and value is not None:
+                    if data.get(key)!=value:changed.add(key)
+                    data[key]=value
+        # Serialize disk and memory together: never report a failed write as saved.
+        temp=CONFIG_PATH+".tmp"
+        try:
+            with open(temp,"w",encoding="utf-8") as handle:
+                json.dump(data,handle,ensure_ascii=False,indent=2)
+            os.replace(temp,CONFIG_PATH)
+        except Exception as error:
+            try:os.remove(temp)
+            except OSError:pass
+            raise RuntimeError("设置没有保存成功，请检查磁盘空间或文件权限后重试") from error
+        CONFIG.update(data)
         analysis_keys={'model','judge_model','harness_enabled','generation_timeout','max_model_calls','max_cloud_requests','max_analysis_cost','vision_enabled','vision_model','vision_base','enabled_extensions','context','junshi_layer','reply_target','reply_target_name','relationship','style'}
-        regenerate = bool(analysis_keys.intersection(changed))
+        regenerate=bool(analysis_keys.intersection(changed))
         if regenerate:
             STATE['session_since']=time.time();STATE['analysis']=None
-        if changed.intersection({"relationship", "style"}) and STATE["session"]:
-            STATE["session_since"] = time.time()
+        if changed.intersection({"relationship","style"}) and STATE["session"]:
+            STATE["session_since"]=time.time()
             try:
                 from securestore import write_json
-                write_json(contact_preferences_path(STATE["session"]), {"relationship": CONFIG["relationship"], "style": CONFIG["style"]})
+                write_json(contact_preferences_path(STATE["session"]),{"relationship":CONFIG["relationship"],"style":CONFIG["style"]})
             except Exception:
+                contact_saved=False
                 log("本次偏好已生效，但联系人偏好保存失败")
-    try:
-        temp = CONFIG_PATH + ".tmp." + uuid.uuid4().hex[:8]
-        with open(temp, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        os.replace(temp, CONFIG_PATH)
-    except Exception as e:
-        log(f"配置写入失败：{e}")
-    if regenerate:
-        schedule_analysis()
+    if regenerate:schedule_analysis()
+    return {"contact_preferences_saved":contact_saved}
 
 
 # ---------- 采集循环（主线程） ----------
@@ -571,8 +569,8 @@ def capture_loop(border_box, stop):
                     STATE.pop("_view_invalid_reason",None)
                 if name != title:
                     title = name
-                    restore_contact_preferences(title)
                     with _lock:
+                        restore_contact_preferences(title)
                         STATE["session"] = title
                         STATE["session_since"] = time.time()
                         # 切换会话：旧候选作废（防填错会话），消息切换为该会话自己的缓存
@@ -590,15 +588,9 @@ def capture_loop(border_box, stop):
                     if has_her:
                         schedule_analysis()
 
-            reader = readers.pop(title, None)
-            if reader is None:
-                reader = Reader(app)
-                # readers 持有每个会话的 OCR 缓存与 seen 列表：联系人多了内存会持续
-                # 增长。超过上限淘汰最久没用的会话（下次切回重建即可）。
-                if len(readers) >= 8:
-                    oldest = next(iter(readers))
-                    del readers[oldest]
-            readers[title] = reader  # 重新插入以维持 LRU 顺序
+            if title not in readers:
+                readers[title] = Reader(app)
+            reader = readers[title]
             try:
                 with _lock: STATE["recognition_phase"] = "recognizing"
                 lines = reader.read(full[y0:y1, x0:x1], bg)
@@ -641,8 +633,7 @@ def capture_loop(border_box, stop):
             except Exception as e:
                 log(f"OCR 出错：{' '.join(str(e).split())[:120]}")
         except Exception:
-            tb = traceback.format_exc().splitlines()
-            log("主循环异常 " + " / ".join(tb[-3:])[-400:])
+            log(" ".join(traceback.format_exc().split())[-200:])
         time.sleep(0.25)
 
     if cap is not None:
@@ -667,12 +658,6 @@ def flash_dsh_window():
         @ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
         def cb(hwnd, _):
             if not u32.IsWindowVisible(hwnd):
-                return True
-            pid = ctypes.c_ulong()
-            u32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-            if pid.value == os.getpid():
-                # 本进程的黄框/面板窗口从不泵消息，跨线程 GetWindowTextW(SendMessage)
-                # 会永久阻塞这个闪烁线程；直接跳过。
                 return True
             n = u32.GetWindowTextLengthW(hwnd)
             buf = ctypes.create_unicode_buffer(n + 1)
@@ -779,7 +764,7 @@ def run_analysis(msgs, cfg, guard):
         result = analyze(
             msgs, cfg["relationship"], API_KEY, model=cfg["model"],
             judge_model=cfg.get("judge_model") or cfg["model"],
-            timeout=cfg["generation_timeout"], context=cfg["context"], reply_to=reply_to, style=cfg["style"],
+            timeout=40, context=cfg["context"], reply_to=reply_to, style=cfg["style"],
             junshi_layer=cfg["junshi_layer"], memory=mem, progress=progress, settings=cfg, vision_key=vision_key, extension_dir=os.path.join(DSH_HOME,'extensions'))
         with _lock:
             if cancelled():
@@ -792,7 +777,6 @@ def run_analysis(msgs, cfg, guard):
                 "source_tail": [dict(m) for m in msgs[-3:]],
                 "context_scope": "observed_messages_latest_position_unverified",
                 "latest_position_verified": False,
-                "latest_position_witness": None,
                 "media_pending":bool(result.get("media_pending")),
                 "completion_stage":result.get("completion_stage"),
                 "candidates": result["candidates"],
@@ -817,8 +801,6 @@ def run_analysis(msgs, cfg, guard):
                 'usage':dict(result.get('usage') or {}),
             }
         log(f"候选已生成（{len(result['candidates'])} 条，{round(time.time() - t0, 1)}s）")
-        if cfg.get('auto_fill'):
-            threading.Thread(target=auto_fill_latest,daemon=True).start()
         HOTKEY_CYCLE["index"] = -1  # 新候选：热键从推荐条重新开始
         # 提醒用户回来看建议：任务栏闪烁 DSH 窗口
         threading.Thread(target=flash_dsh_window, daemon=True).start()
@@ -841,10 +823,7 @@ def run_analysis(msgs, cfg, guard):
         with _lock:
             if not cancelled():
                 STATE["analysis_error"] = error
-                try:
-                    STATE["analysis_diagnostics"] = __import__('analysisdiag').safe(getattr(e,"analysis_diagnostics",None))
-                except Exception:
-                    STATE["analysis_diagnostics"] = None
+                STATE["analysis_diagnostics"] = __import__('analysisdiag').safe(getattr(e,"analysis_diagnostics",None))
         log(f"分析失败：{error}")
     finally:
         with _lock:
@@ -859,112 +838,8 @@ def run_analysis(msgs, cfg, guard):
             schedule_analysis(force_fresh=pending_force)
 
 
-def latest_position_witness(hwnd, max_age=1.5, stale_after=900.0):
-    """Geometry witness for the message list, from the engine's own frame.
-
-    Read-only, and deliberately does NOT open a second capture session: WGC
-    runs free-threaded, and starting/stopping a second session on a window that
-    is already being captured destabilises the engine. The capture loop already
-    keeps the current frame, so the verdict is measured from that frame.
-
-    Freshness is decided by agreement with a fresh screen grab, NOT by the wall
-    clock. WGC only emits a frame when the window repaints, so a motionless
-    WeChat legitimately produces no new frame and `frame_age` grows without
-    bound. Measured on real WeChat: 13s -> 33s -> 127s -> 241s -> 437s, while
-    successive screen grabs of that same window differed by 0 changed pixels
-    and the capture loop kept ticking. A wall-clock gate therefore refused
-    forever on a window that was provably still, which made automatic filling
-    unreachable in exactly the case it exists for.
-
-    So the only question asked is whether the engine's frame still shows what is
-    on screen. `freshframe.confirm_frame_current` re-grabs the window and
-    compares: agreement means the frame is current regardless of its age,
-    disagreement refuses and the engine picks up the new frame on its next
-    capture. `stale_after` is now only a dead-pipeline bound, set well above any
-    real repaint interval, and `frame_age_seconds` is a diagnostic.
-
-    Every guard is unchanged otherwise: no second WGC session, no input, and a
-    refusal whenever the window is occluded, the frame size disagrees with the
-    window rect, or the measurement is not reproducible.
-    """
-    if not hwnd:
-        return {'available': False, 'verified': False,
-                'reason': '微信窗口未就绪，无法核对是否位于最新位置', 'read_only': True}
-    with _lock:
-        frame = STATE.get('last_frame')
-        captured_at = STATE.get('last_frame_at')
-    from freshframe import confirm_frame_current
-    current = confirm_frame_current(int(hwnd), frame, captured_at,
-                                    stale_after=stale_after)
-    if current.get('available') is False:
-        return current
-    from capture import chat_area, window_rect
-    area = chat_area(frame)
-    if not area:
-        return {'available': False, 'verified': False,
-                'reason': '会话区域不确定，无法核对是否位于最新位置', 'read_only': True}
-    x0, y_top, x1, y_input = area[0], area[1], area[2], area[3]
-    # Skip the avatar gutter so the sidebar cannot masquerade as list content,
-    # and stop at the composer edge so the input box is never counted.
-    list_box = (x0 + 58, y_top, x1, y_input)
-    from latestpos import probe
-    witness = probe(int(hwnd), frame=frame, rect=window_rect(int(hwnd)),
-                    list_box=list_box, background=30)
-    for key in ('frame_age_seconds', 'frame_is_current', 'capture_live',
-                'frame_source', 'freshness_rule', 'frame_matches_window',
-                'unobscured', 'changed_pixel_ratio', 'stale_after_seconds'):
-        if key in current:
-            witness[key] = current[key]
-    witness['geometry_observed'] = bool(witness.get('verified'))
-    witness['verified'] = False
-    witness['available'] = False
-    witness['reason'] = '仅观察到可见消息区，无法证明处于最新位置，自动填入已跳过'
-    return witness
 
 
-def auto_fill_latest():
-    with _lock:
-        a=STATE.get('analysis');enabled=CONFIG.get('auto_fill')
-        if not enabled or CONFIG.get('paused') or not a:return
-        if a.get("media_pending"):
-            STATE["auto_fill_status"]="媒体尚未理解，自动填入已跳过";return
-        if not advice_fresh(a):
-            STATE['auto_fill_status']='建议已过期或时间异常，请重新生成；仍可复制';return
-        version=(a.get('session'),a.get('ts'))
-        if STATE.get('auto_fill_last')==version:return
-        STATE['auto_fill_last']=version
-        STATE['auto_fill_status']='正在核对输入区'
-        messages=a.get('understood_messages',[])
-        if a.get('source_signature')!=message_signature(STATE['messages']):
-            STATE['auto_fill_status']='有新消息，等待新建议';return
-    if not a.get('review_ok') or (not a.get('rank_ok') and a.get('selection_method')!='first_verified'):
-        with _lock:STATE['auto_fill_status']='推荐排序未完成，请手动选择'
-        return
-    # Latest position must be measured from a fresh frame. A screenshot or model
-    # confidence never grants this: both describe what is visible, not that
-    # nothing newer exists off-screen. No witness, an unreadable one, or a stale
-    # one keeps every guard active.
-    try:
-        witness = latest_position_witness(int(STATE.get('wechat', {}).get('hwnd') or 0))
-    except Exception:
-        witness = None
-    with _lock:
-        STATE['latest_position_witness'] = witness
-    if not (witness and witness.get('verified')):
-        with _lock:
-            STATE['auto_fill_status'] = (witness or {}).get('reason') or '无法核对消息列表是否位于最新位置，请核对后手动填入'
-        return
-    with _lock:
-        STATE['auto_fill_status'] = '已核对到最新位置，正在填入'
-        a = STATE.get('analysis')
-        if a is None:
-            STATE['auto_fill_status'] = '无法核对消息列表是否位于最新位置，请核对后手动填入'
-            return
-        a['latest_position_verified'] = True
-        a['latest_position_witness'] = witness
-        a['context_scope'] = 'observed_messages_latest_position_verified'
-        index = a.get('best_index', 0)
-    threading.Thread(target=do_fill, kwargs={'index': index, 'automatic': True}, daemon=True).start()
 
 
 
@@ -1020,11 +895,6 @@ def _wait_wechat():
 def state_payload():
     with _lock:
         analysis = STATE["analysis"]
-        try:
-            from evidence import store
-            identity_data = store(DSH_HOME).participants(STATE["session"])
-        except Exception:
-            identity_data = {"items": [], "observed": 0, "confirmed": 0}
         payload = {
             "ok": True,
             "ts": time.time(),
@@ -1040,12 +910,11 @@ def state_payload():
                 "ocr_metrics": dict(STATE["ocr_metrics"]),
                 "layout_metrics":dict(STATE['layout_metrics']),
                 "title_ready": STATE["title_ready"],
-                "auto_fill_status": STATE["auto_fill_status"],
-                "latest_position_witness": STATE.get("latest_position_witness"),
                 "recognition_phase": STATE["recognition_phase"],
                 "analysis_phase": STATE["analysis_phase"],
                 "analysis_elapsed": round(time.time()-STATE["analysis_started"],1) if STATE["analysis_inflight"] else 0,
                 "manual_phase": STATE["manual_phase"],
+                "manual_phase_request": STATE.get("manual_phase_request"),
                 "model": CONFIG["model"],
                 "request_channels":__import__('requestgate').snapshot(),
                 "judge_model": CONFIG.get("judge_model") or CONFIG["model"],
@@ -1062,8 +931,9 @@ def state_payload():
             "manual_preview": STATE.get("manual_preview"),
             "last_area": STATE["last_area"],
             "launch_wait": STATE["launch_wait"],
-            "participants": identity_data.get("items", []),
-            "identity_coverage": identity_data,            "harness": __import__('harness_adapter').status(),
+            "participants": __import__('evidence').store(DSH_HOME).participants(STATE['session'])['items'],
+            "identity_coverage": __import__('evidence').store(DSH_HOME).participants(STATE['session']),
+            "harness": __import__('harness_adapter').status(),
             "settings": {
                 "relationship": CONFIG["relationship"],
                 "style": CONFIG["style"],
@@ -1083,7 +953,6 @@ def state_payload():
                 "max_cloud_requests":CONFIG['max_cloud_requests'],
                 "max_analysis_cost":CONFIG['max_analysis_cost'],
                 "uia_enabled":CONFIG['uia_enabled'],
-                "auto_fill": bool(CONFIG.get('auto_fill')),
                 "vision_enabled": bool(CONFIG.get('vision_enabled')),
                 "vision_base": CONFIG.get('vision_base',''),
                 "vision_model": CONFIG.get('vision_model',''),
@@ -1096,7 +965,7 @@ def state_payload():
         return payload
 
 
-def do_fill(index, edited_text=None, analysis_ts=None, automatic=False):
+def do_fill(index, edited_text=None, analysis_ts=None):
     with _lock:
         analysis = STATE["analysis"]
         area = STATE["last_area"]
@@ -1125,8 +994,6 @@ def do_fill(index, edited_text=None, analysis_ts=None, automatic=False):
         return {"ok": False, "error": "候选序号超出范围"}
     if not area or not hwnd:
         return {"ok": False, "error": "还没有定位到微信输入框（消息区未识别）"}
-    if automatic:
-        return {'ok': False, 'error': '最新位置适配尚未通过可靠验证，自动填入已跳过'}
     text = cands[index] if edited_text is None else edited_text
     if not isinstance(text, str) or not text.strip() or len(text) > 2000:
         return {"ok": False, "error": "回复应为 1 到 2000 字"}
@@ -1135,9 +1002,7 @@ def do_fill(index, edited_text=None, analysis_ts=None, automatic=False):
     try:
         if CONFIG.get("paused"):
             return {"ok": False, "error": "已暂停读取，仅允许复制"}
-        if automatic:
-            if not CONFIG.get('auto_fill'):raise RuntimeError('自动填入已关闭')
-        fill_into(int(hwnd), area, text, verify=lambda check_idle=True: verify_live_session(int(hwnd), cur_session,automatic=automatic,check_idle=check_idle,expected_analysis=analysis), automatic=automatic)
+        fill_into(int(hwnd), area, text, verify=lambda: verify_live_session(int(hwnd), cur_session,expected_analysis=analysis))
     except Exception as e:
         log(f"填入失败：{' '.join(str(e).split())[:160]}")
         return {"ok": False, "error": f"填入失败：{' '.join(str(e).split())[:160]}"}
@@ -1146,16 +1011,14 @@ def do_fill(index, edited_text=None, analysis_ts=None, automatic=False):
     return {"ok": True, "filled": text, "index": index}
 
 
-def verify_live_session(hwnd, expected, automatic=False, check_idle=True, expected_analysis=None):
+def verify_live_session(hwnd, expected, expected_analysis=None):
     """Independent fresh screenshot; never trust stale capture-loop state."""
     if not advice_fresh(expected_analysis):
         raise RuntimeError('建议已过期或时间异常，停止填入')
     current, app = find_chat_hwnd()
     if not expected or current != hwnd or not app:
         raise RuntimeError("聊天窗口已变化，请复制回复后手动粘贴")
-    # 核验用 PrintWindow 兜底采集，不再对主采集循环正在 WGC 捕获的同一窗口
-    # 开第二个 WGC 会话（第二个会话会让引擎采集不稳定，见采集循环注释）。
-    cap, _ = make_capture(hwnd, prefer_wgc=False)
+    cap, _ = make_capture(hwnd)
     frame = None
     try:
         deadline = time.monotonic() + 3.0
@@ -1171,45 +1034,22 @@ def verify_live_session(hwnd, expected, automatic=False, check_idle=True, expect
     area = chat_area(frame)
     if not area:
         raise RuntimeError("会话区域不确定，仅允许复制")
-    if automatic:
-        # Re-measure the list bottom now, on this exact window. A witness that
-        # was valid when the suggestion was produced may be stale: the user may
-        # have scrolled, or new messages may have arrived. No fresh verified
-        # witness means no automatic fill, regardless of earlier state.
-        try:
-            witness=latest_position_witness(int(hwnd))
-        except Exception:
-            witness=None
-        if not (witness and witness.get('verified')):
-            raise RuntimeError((witness or {}).get('reason') or '无法核对消息列表是否位于最新位置，自动填入已跳过')
-        with _lock:
-            STATE['latest_position_witness']=witness
-            if STATE.get('analysis'):
-                STATE['analysis']['latest_position_verified']=True
-                STATE['analysis']['latest_position_witness']=witness
-        from inputguard import verify_ready
-        verify_ready(hwnd,frame,area,check_idle=check_idle)
-    else:
-        from inputguard import inspect_input
-        empty,reason=inspect_input(frame,area)
-        if not empty:raise RuntimeError(reason)
+    from inputguard import inspect_input
+    empty,reason=inspect_input(frame,area)
+    if not empty:raise RuntimeError(reason)
     x0, y0, x1, y1, bg, y_pane = area
     title = read_title(frame[y_pane:y0,x0:x1], app)
     if not title or title.strip() != expected.strip():
         raise RuntimeError("当前会话标题不一致，已拒绝填入，仅允许复制")
     with _lock:
         if not expected_analysis or STATE.get('analysis') is not expected_analysis or expected_analysis.get('source_signature')!=message_signature(STATE['messages']):raise RuntimeError('消息或建议已更新，停止填入')
-    if automatic:
-        with _lock:
-            if not CONFIG.get('auto_fill') or CONFIG.get('paused'):raise RuntimeError('自动填入已关闭或暂停')
-            if not expected_analysis or STATE.get('analysis') is not expected_analysis or expected_analysis.get('source_signature')!=message_signature(STATE['messages']):raise RuntimeError('消息或建议已更新，自动填入已跳过')
     if expected_analysis:
         reader=Reader(app)
         visible=reader.read(frame[y0:y1,x0:x1],bg)
         tail=[{'from':who,'name':nm,'text':text,'time':tm,'kind':kind,'media_id':reader.media_refs.get(y) if kind=='media_unknown' else None} for who,nm,text,y,tm,kind in visible[-3:]]
         expected_tail=[m.get('original_observation') or m for m in expected_analysis.get('source_tail',[])]
         if message_signature(tail,visual_only=True)!=message_signature(expected_tail,visual_only=True):
-            raise RuntimeError('最新屏幕消息未核对一致，自动填入已跳过')
+            raise RuntimeError('屏幕消息未核对一致，停止填入，请重新分析')
         if not advice_fresh(expected_analysis):
             raise RuntimeError('核验期间建议已过期，停止填入')
 
@@ -1243,22 +1083,35 @@ def do_analyze_text(body):
     if any(not isinstance(m, dict) or m.get("from") not in ("her", "me") or not isinstance(m.get("text"), str) or len(m["text"]) > 4000 for m in msgs):
         return {"ok": False, "error": "消息格式无效或过长"}
     rel = str(body.get("relationship") or CONFIG["relationship"])
-    style = str(body.get("style") or CONFIG["style"])
+    style = str(body.get('style','') if 'style' in body else CONFIG['style'])
+    reply_to=body.get('reply_to')
+    if reply_to is not None and (not isinstance(reply_to,str) or len(reply_to)>80):return {'ok':False,'error':'回复对象名称无效'}
     def progress(phase):
-        with _lock: STATE["manual_phase"] = phase
+        with _lock:
+            if STATE.get('manual_phase_request')==phase_id:STATE['manual_phase']=phase
+    request_id=body.get('request_id')
+    if request_id is not None and (not isinstance(request_id,str) or not request_id.strip() or len(request_id)>80):return {'ok':False,'error':'请求编号无效'}
+    cancel_event=None
+    phase_id=request_id or uuid.uuid4().hex
+    phase_owned=False
     try:
+        if request_id is not None:
+            from manualjobs import jobs
+            cancel_event=jobs.start(request_id)
+            if cancel_event.is_set():raise InterruptedError('本次生成已取消')
+        with _lock:STATE['manual_phase_request']=phase_id;STATE['manual_phase']='start';phase_owned=True
         from securestore import read_json
         try:vision_key=read_json(os.path.join(DSH_HOME,'vision-key.dpapi')).get('key','')
         except Exception:vision_key=''
-        request_id=body.get('request_id')
-        if request_id is not None and (not isinstance(request_id,str) or len(request_id)>80):raise ValueError('请求编号无效')
         def preview(result):
             if request_id:
-                with _lock:STATE['manual_preview']={'request_id':request_id,'result':{**result,'judgment':display_judgment(result.get('answers',{}))}}
+                with _lock:
+                    if cancel_event and cancel_event.is_set():return
+                    STATE['manual_preview']={'request_id':request_id,'result':{**result,'judgment':display_judgment(result.get('answers',{}))}}
         result = analyze(msgs, rel, API_KEY, model=CONFIG["model"], timeout=40,
                          judge_model=CONFIG.get("judge_model") or CONFIG["model"],
-                         context=CONFIG["context"], style=style,
-                         junshi_layer=CONFIG["junshi_layer"], progress=progress, settings={**CONFIG, '_force_fresh':bool(body.get('force_fresh',False)), **({'_on_partial':preview} if request_id else {})},vision_key=vision_key,extension_dir=os.path.join(DSH_HOME,'extensions'))
+                         context=CONFIG["context"], style=style,reply_to=reply_to,
+                         junshi_layer=CONFIG["junshi_layer"], progress=progress, settings={**CONFIG, '_force_fresh':bool(body.get('force_fresh',False)), **({'_cancel':cancel_event.is_set} if cancel_event is not None else {}), **({'_on_partial':preview} if request_id else {})},vision_key=vision_key,extension_dir=os.path.join(DSH_HOME,'extensions'))
         return {
             "ok": True,
             "candidates": result["candidates"],
@@ -1283,19 +1136,15 @@ def do_analyze_text(body):
             "warnings": result.get('warnings',[]),
             "extension_notes": result.get('extension_notes',[]),
         }
+    except InterruptedError:
+        return {'ok':False,'cancelled':True,'error':'本次生成已取消，输入文字仍保留'}
     except Exception as e:
         return {"ok": False, "error": " ".join(str(e).split())[:200], "diagnostics":__import__('analysisdiag').safe(getattr(e,'analysis_diagnostics',None))}
     finally:
-        with _lock: STATE["manual_phase"] = "idle"
-
-
-_AUTH_LOG_AT = [0.0]
-def _auth_log(msg):
-    """鉴权拒绝是高频噪音（本机任意程序都能打端口）：限速到每 10 秒一条。"""
-    now = time.time()
-    if now - _AUTH_LOG_AT[0] > 10:
-        _AUTH_LOG_AT[0] = now
-        flog(msg)
+        if cancel_event is not None:jobs.finish(request_id,cancel_event)
+        with _lock:
+            if phase_owned and STATE.get('manual_phase_request')==phase_id:
+                STATE['manual_phase']='idle';STATE['manual_phase_request']=None
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -1310,7 +1159,7 @@ class Handler(BaseHTTPRequestHandler):
             return False
         host = self.headers.get("Host", "")
         if host not in (f"127.0.0.1:{self.server.server_port}", f"localhost:{self.server.server_port}"):
-            _auth_log('API host rejected: '+repr(host)+' expected_port='+str(self.server.server_port))
+            flog('API host rejected: '+repr(host)+' expected_port='+str(self.server.server_port))
             return False
         origin = self.headers.get("Origin")
         if origin and origin not in (f"http://127.0.0.1:{self.server.server_port}", f"http://localhost:{self.server.server_port}"):
@@ -1320,7 +1169,7 @@ class Handler(BaseHTTPRequestHandler):
             return True
         auth = self.headers.get("Authorization", "")
         accepted = bool(_token) and hmac.compare_digest(auth, "Bearer " + _token)
-        if not accepted:_auth_log('API authentication rejected; authorization_present='+str(bool(auth)))
+        if not accepted:flog('API authentication rejected; authorization_present='+str(bool(auth)))
         return accepted
     def _json(self, payload, code=200):
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -1330,11 +1179,7 @@ class Handler(BaseHTTPRequestHandler):
         # 不发 Access-Control-Allow-Origin：引擎只服务本机代理，杜绝任意网页直读聊天内容
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
-        try:
-            self.wfile.write(body)
-        except (ConnectionError, BrokenPipeError, OSError):
-            # 客户端（WebView 轮询）断开：写回必然失败，吞掉避免 socketserver 刷整段 traceback。
-            pass
+        self.wfile.write(body)
 
     def _body(self):
         n = int(self.headers.get("Content-Length") or 0)
@@ -1353,7 +1198,12 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"ok": False, "error": "unauthorized"}, 401)
             return
         if self.command == 'GET' and path == '/capabilities':
-            self._json({'ok':True,'api_version':'1.0','app_version':'1.5.58','tools':['state','participants','analyze-text','regenerate','settings','extensions','vision-models','fill','models','evidence','correct-message','uia','memory-confirm','media-file','media-job','attach-media','verify-extension','latest-position'], 'evidence_api_version':'1.1', 'sends_messages':False,'automatic_fill_available':False,'automatic_fill_reason':'latest_position_adapter_not_verified_geometry_is_observation_only'});return
+            self._json({'ok':True,'api_version':'1.0','app_version':'1.5.68','tools':['state','participants','analyze-text','cancel-manual','regenerate','settings','extensions','vision-models','fill','models','evidence','correct-message','uia','memory-confirm','media-file','media-job','attach-media','verify-extension'], 'evidence_api_version':'1.1', 'sends_messages':False});return
+        if self.command == 'POST' and path == '/cancel-manual':
+            identity=self._body().get('request_id')
+            if not isinstance(identity,str) or not identity.strip() or len(identity)>80:raise ValueError('请求编号无效')
+            from manualjobs import jobs
+            jobs.cancel(identity);self._json({'ok':True,'cancellation_requested':True});return
         if self.command == 'POST' and path == '/media-file':
             body=self._body()
             with _lock:
@@ -1403,10 +1253,6 @@ class Handler(BaseHTTPRequestHandler):
             self._json({'ok':True,'models':rows});return
         if self.command == 'GET' and path == '/uia':
             self._json({'ok':True,'snapshot':__import__('uia_reader').snapshot(STATE['wechat'].get('hwnd',0)) if CONFIG.get('uia_enabled') else {'available':False,'reason':'disabled'}});return
-        if self.command == 'GET' and path == '/latest-position':
-            hwnd=STATE['wechat'].get('hwnd',0)
-            if not hwnd:self._json({'ok':True,'witness':{'available':False,'verified':False,'reason':'微信窗口未就绪','read_only':True}});return
-            self._json({'ok':True,'witness':latest_position_witness(int(hwnd))});return
         if self.command == 'POST' and path == '/evidence':
             body=self._body();key=body.get('crop_id','')
             if not isinstance(key,str):raise ValueError('证据编号无效')
@@ -1516,9 +1362,11 @@ class Handler(BaseHTTPRequestHandler):
             return
         if self.command == "POST" and path == "/settings":
             patch = self._body()
-            save_config(patch)
+            if not isinstance(patch,dict):raise ValueError("设置必须为对象")
+            expected=patch.pop("expected_session",None)
+            saved=save_config(patch,expected_session=expected)
             log("设置已更新")
-            self._json({"ok": True, "settings": state_payload()["settings"]})
+            self._json({"ok": True, "settings": state_payload()["settings"],**saved})
             return
         if self.command == "POST" and path == "/fill":
             body = self._body()
@@ -1686,12 +1534,6 @@ def main():
         pass
     load_config()
     flog(f"config loaded, key={'yes' if API_KEY else 'no'}, paused={CONFIG.get('paused')}")
-    # 启动时清一次 Harness 会话日志（含云端聊天上下文），保留最近 7 天。
-    try:
-        from harness_adapter import prune_sessions
-        prune_sessions(DSH_HOME, days=7)
-    except Exception:
-        pass
     if not API_KEY:
         log("未设置 DEEPSEEK_API_KEY：能读屏，但无法生成候选")
     # Tracebacks on demand only; avoid hourly growth during healthy idle.
@@ -1707,10 +1549,6 @@ def main():
             threading.Thread(target=launch_wechat, daemon=True).start()
     port = int(os.environ.get("DSH_JUNSHI_PORT") or 47830)
     server, actual, last_err = None, port, None
-    tag = None
-    # _token 在模块顶部永远非空（env 或 token_urlsafe 兜底），必须用环境变量本身判断
-    # 是否独立运行，否则“独立模式自动开浏览器”永远走不到。
-    standalone = os.environ.get("DSH_JUNSHI_TOKEN") is None
     for attempt in range(10):
         try:
             import socket
@@ -1740,12 +1578,10 @@ def main():
     server.capture_thread = t
     log(f"HTTP API: 127.0.0.1:{actual}")
     flog(f"bound port {actual}")
-    # 独立运行（exe 双击，无宿主 token）：自动打开浏览器面板，token 经 URL fragment
-    # 传给页面（fragment 不进 HTTP 请求，不落服务端日志）。
-    if standalone and os.environ.get("DSH_JUNSHI_NO_BROWSER") != "1":
+    # 独立运行（exe 双击，无宿主 token）：自动打开浏览器面板
+    if not _token and os.environ.get("DSH_JUNSHI_NO_BROWSER") != "1":
         try:
-            import webbrowser
-            threading.Timer(1.0, lambda: webbrowser.open(f"http://127.0.0.1:{actual}/ui#token={_token}")).start()
+            threading.Timer(1.0, lambda: os.startfile(f"http://127.0.0.1:{actual}/ui")).start()
             log("已打开独立面板（浏览器）")
         except Exception:
             pass
@@ -1758,28 +1594,6 @@ def main():
         from harness_adapter import close_all
         close_all()
         server.server_close()
-        # 退出时删掉自己写的端口文件：删除前校验内容确实是本实例的端口，
-        # 避免同 token 双实例/快速重启重叠时误删后继实例刚写的文件。
-        if tag:
-            try:
-                own = os.path.join(DSH_HOME, f".dsh-junshi.port.{tag}")
-                if os.path.exists(own):
-                    try:
-                        with open(own, encoding="utf-8") as f:
-                            mine = f.read().strip() == str(actual)
-                    except OSError:
-                        mine = False
-                    if mine:os.remove(own)
-                shared = os.path.join(DSH_HOME, ".dsh-junshi.port")
-                if os.path.exists(shared):
-                    try:
-                        with open(shared, encoding="utf-8") as f:
-                            stale = f.read().strip() == str(actual)
-                    except OSError:
-                        stale = False
-                    if stale:os.remove(shared)
-            except OSError:
-                pass
         b = border_box.get("b")
         if b:
             try:

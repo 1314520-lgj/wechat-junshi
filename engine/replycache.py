@@ -2,12 +2,26 @@
 import copy,hashlib,inspect,json,threading,time
 from collections import OrderedDict
 from pathlib import Path
-_entries=OrderedDict();_lock=threading.Lock();TTL=20;CAPACITY=4
+_entries=OrderedDict();_lock=threading.Lock();TTL=60;CAPACITY=8
 # 消息里只有这些字段代表「可见证据本身」；observed_at/sequence/speaker_id/evidence 等
 # 观察元数据每次都变，不能进缓存键，否则同一证据重新观察后永远打不中缓存/飞行合并。
 _MESSAGE_KEY_FIELDS=('from','text','kind','media_description','thumbnail_description',
     'media_transcript','media_association_source','media_understanding_complete',
-    'transcript_confirmation','vision_uncertain','vision_confidence','content_source','time','who')
+    'transcript_confirmation','vision_uncertain','vision_confidence','content_source','time','who',
+    'name','text_confirmation','uncertainties','media_understanding_complete','media_incomplete',
+    'media_caption','media_id','identity_confidence','identity_scope')
+
+def cached_visual_evidence(message,settings):
+    if not settings.get('vision_enabled') or not message.get('media_id'):return None
+    from media import description
+    from vision import validate_base,VISION_CACHE_VERSION
+    try:provider=validate_base(settings.get('vision_base',''))+'|'+settings.get('vision_model','').strip()+'|'+VISION_CACHE_VERSION
+    except (ValueError,AttributeError):return None
+    cached=description(message['media_id'],provider)
+    if not cached or cached.get('uncertain') or cached.get('confidence',0)<.75:return None
+    # Thumbnail and audio-bubble descriptions never prove full understanding.
+    if message.get('kind') in ('video','audio') or cached.get('kind') in ('video','audio','media_unknown'):return None
+    return cached
 def key_for(fn,args,kwargs,home,allow_unresolved=False):
     values=inspect.signature(fn).bind_partial(*args,**kwargs);values.apply_defaults();v=dict(values.arguments)
     settings=dict(v.get('settings') or {})
@@ -15,8 +29,19 @@ def key_for(fn,args,kwargs,home,allow_unresolved=False):
     cleaned=[]
     for m in v.get('messages',[]):
         if not isinstance(m,dict):return None
-        if not allow_unresolved and m.get('kind') in ('media_unknown','image','video','audio','sticker') and (not m.get('media_description') or m.get('vision_uncertain')):return None
-        cleaned.append({k:m[k] for k in _MESSAGE_KEY_FIELDS if k in m})
+        visual=None
+        if not allow_unresolved and m.get('kind') in ('media_unknown','image','video','audio','sticker') and (not m.get('media_description') or m.get('vision_uncertain') or m.get('media_understanding_complete') is False):
+            # An explicitly uncertain supplied observation remains uncertain.
+            if m.get('vision_uncertain') or m.get('media_understanding_complete') is False:return None
+            visual=cached_visual_evidence(m,settings)
+            if visual is None:return None
+        row={k:m[k] for k in _MESSAGE_KEY_FIELDS if k in m}
+        # Random observation IDs change each read. Explicitly confirmed speaker
+        # links affect source ownership and must distinguish cached advice.
+        if m.get('identity_confidence')=='user_confirmed' and m.get('speaker_id'):
+            row['speaker_id']=m['speaker_id']
+        if visual is not None:row['cached_visual_evidence']=visual
+        cleaned.append(row)
     v['messages']=cleaned
     settings.pop('_cancel',None);settings.pop('_on_partial',None);v['settings']=settings;v.pop('progress',None)
     try:
@@ -36,7 +61,7 @@ def get(key):
         result['cache_hit']=True;result['model_trace']=[];result['cost_reserved']=0
         if 'usage' in result:result['usage']={'requests':0,'phase':'verified-cache','cost_reserved':0,'draft_attempts':0}
         result['phase_timings']=[{'phase':'verified-cache','seconds':0}]
-        result['warnings']=list(result.get('warnings',[]))+['复用20秒内相同证据与设置的已核验建议；本次没有新增模型调用']
+        result['warnings']=list(result.get('warnings',[]))+[f'复用{TTL}秒内相同证据与设置的已核验建议；本次没有新增模型调用']
         return result
 def put(key,result):
     if key is None or not result.get('review_ok') or not result.get('candidates'):return

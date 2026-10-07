@@ -1,15 +1,7 @@
-"""Conservative automatic draft guard: foreground, idle, blank input, no send."""
-import ctypes,time,re
+"""Conservative blank-composer inspection for user-requested draft filling."""
+import re
 import numpy as np
 from ocr import _engine
-
-class LASTINPUTINFO(ctypes.Structure):
-    _fields_=[('cbSize',ctypes.c_uint),('dwTime',ctypes.c_uint)]
-
-def idle_seconds():
-    info=LASTINPUTINFO(ctypes.sizeof(LASTINPUTINFO),0)
-    if not ctypes.windll.user32.GetLastInputInfo(ctypes.byref(info)):return 0
-    return ((ctypes.windll.kernel32.GetTickCount()-info.dwTime)&0xffffffff)/1000
 
 def inspect_input(frame,area):
     x0,_,x1,y1=map(int,area[:4]);h,w=frame.shape[:2]
@@ -37,14 +29,3 @@ def inspect_input(frame,area):
     _,counts=np.unique(q,axis=0,return_counts=True)
     if counts.max()/max(1,len(q))<.985:return False,'输入框可能已有内容，保留你的草稿'
     return True,'输入框为空'
-
-def verify_ready(hwnd,frame,area,check_idle=True):
-    if int(ctypes.windll.user32.GetForegroundWindow())!=int(hwnd):raise RuntimeError('微信不在前台，自动填入已跳过')
-    if check_idle and idle_seconds()<2:raise RuntimeError('你正在操作，自动填入已跳过')
-    ok,reason=inspect_input(frame,area)
-    if not ok:raise RuntimeError(reason)
-
-def last_input_tick():
-    info=LASTINPUTINFO(ctypes.sizeof(LASTINPUTINFO),0)
-    if not ctypes.windll.user32.GetLastInputInfo(ctypes.byref(info)):raise RuntimeError('无法核对输入活动')
-    return info.dwTime

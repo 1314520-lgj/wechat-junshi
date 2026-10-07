@@ -295,6 +295,8 @@ def line_of(m):
     elif isinstance(m,dict) and m.get('media_description'):
         label={'sticker':'表情包','image':'图片','video':'视频缩略图','media_unknown':'媒体'}.get(kind,kind)
         body=f"[{label}，视觉描述（可能有误）：{m['media_description']}]"
+    elif isinstance(m,dict) and m.get('media_caption'):
+        body='[媒体配字观察，可能错读；图案未理解，意图未确认] '+str(m['media_caption'])
     elif kind=='audio':
         body='[语音气泡；音频内容需独立转写并核对，未知]' if not text or text.strip()=='[语音]' else '[语音相关文字，需核对来源] '+text
     elif kind=='quoted':
@@ -396,7 +398,7 @@ def build_judge_prompt(state, memory=None):
     extra = ""
     if memory:
         from memory import context_block
-        block = context_block(memory)
+        block = context_block(memory,messages=state['chat']['messages'])
         if block:
             extra = f"\n\n{block}"
     return {

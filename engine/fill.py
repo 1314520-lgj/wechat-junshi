@@ -103,15 +103,14 @@ def set_clipboard(text):
     raise RuntimeError("OpenClipboard 连续失败，剪贴板被其他程序占用")
 
 
-def fill(hwnd, area, text, rect=None, verify=None, automatic=False):
+def fill(hwnd, area, text, rect=None, verify=None):
     """area = 消息区 (x0, y0, x1, y1)（帧内物理像素）；输入框就在底线 y1 下面。"""
     from capture import unminimize, window_rect
 
     if verify:
         verify()
     # 手动模式先还原再取坐标：最小化时 GetWindowRect 给的是最小化矩形，坐标会落空。
-    if not automatic:
-        unminimize(hwnd)
+    unminimize(hwnd)
     if _clipboard_holds_non_text():
         raise RuntimeError("剪贴板里有图片或文件，为避免覆盖它们请先复制一段文字后再填入")
     old_clip = read_clipboard_text()
@@ -127,7 +126,6 @@ def fill(hwnd, area, text, rect=None, verify=None, automatic=False):
 
     # SetForegroundWindow 有前台保护，AttachThreadInput 绕过
     fg = u32.GetForegroundWindow()
-    if automatic and fg != hwnd:raise RuntimeError('微信不在前台，停止自动填入')
     if fg != hwnd:
         fg_tid = u32.GetWindowThreadProcessId(fg, None)
         our_tid = k32.GetCurrentThreadId()
@@ -147,16 +145,9 @@ def fill(hwnd, area, text, rect=None, verify=None, automatic=False):
     time.sleep(0.05)
     if u32.GetForegroundWindow() != hwnd:
         raise RuntimeError("微信未获得焦点，已拒绝粘贴")
-    # 合成点击也会更新 LASTINPUTINFO：在点击之后采样作为“空闲基线”。
-    from inputguard import last_input_tick
-    activity = last_input_tick()
     if verify:
-        if automatic:verify(False)
-        else:verify()
-    if automatic:
-        # 自动模式：核验期间用户开始操作就中止（此时用户理应没有碰鼠标键盘）。
-        if last_input_tick()!=activity:raise RuntimeError('你开始操作了，停止自动填入')
-    # 两种模式都在发键前复检前台窗口：核验之后切窗/焦点被抢会让 Ctrl+V 贴到别处。
+        verify()
+    # 发键前复检前台窗口：核验之后切窗/焦点被抢会让 Ctrl+V 贴到别处。
     # 手动模式不复检输入空闲——GetLastInputInfo 对任何鼠标移动都更新，
     # 手动点“填入”后随手移动鼠标会误中止。
     if u32.GetForegroundWindow()!=hwnd:raise RuntimeError('前台窗口变化，已拒绝粘贴')

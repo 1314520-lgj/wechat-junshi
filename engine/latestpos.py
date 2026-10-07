@@ -205,7 +205,7 @@ def find_render_subtree(root, max_depth=12):
     Everything the caller passes upward comes from below this node only, so an
     unrelated window's scroll pattern can never be mistaken for WeChat's.
     """
-    stack = [(root, 0)]
+    stack = deque([(root, 0)])
     while stack:
         item, depth = stack.popleft()
         if item is None:
