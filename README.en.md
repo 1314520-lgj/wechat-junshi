@@ -1,5 +1,10 @@
 # Junshi (wechat-junshi) — a read-only WeChat reply assistant for Windows
 
+[![CI](https://github.com/1314520-lgj/wechat-junshi/actions/workflows/ci.yml/badge.svg)](https://github.com/1314520-lgj/wechat-junshi/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](requirements.txt)
+[![Windows 10/11](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4.svg)](#running)
+
 Junshi is a Windows desktop assistant that **observes** the currently visible WeChat conversation, understands text and rich media, drafts and fact-checks candidate replies in context, and lets **you** paste them into the input box. **It never sends anything** — sending is always your own action.
 
 > Not an auto-reply bot. Junshi's goal: understand the context, sound like you, and leave the choice to you.
@@ -61,6 +66,35 @@ A prebuilt desktop installer exists but is not part of this repository; this rep
 ## Layout checks
 
 With Node.js 20 or newer, run `npm install`, `npx playwright install chromium`, then `npm run test:layout`. Tests use synthetic conversations and a mocked service; they do not contact WeChat or any model provider.
+
+## Development
+
+**Requirements:** Windows 10/11 + **Python 3.12** (`rapidocr-onnxruntime==1.4.4`
+declares `Requires-Python >=3.6,<3.13`; on 3.13 dependency resolution fails) +
+Node.js ≥ 20 (layout checks only).
+
+```powershell
+git clone https://github.com/1314520-lgj/wechat-junshi.git
+cd wechat-junshi
+pip install -r requirements.txt -r requirements-dev.txt
+pre-commit install              # enable git hooks, once
+```
+
+**Pre-submit checks** (same policy as CI — make sure they are green):
+
+```powershell
+pre-commit run --all-files      # file hygiene + ruff + pip-audit
+ruff check .                    # ruleset and exemptions live in pyproject.toml
+python -m unittest discover -s tests -p "test_*.py"
+```
+
+CI runs four dimensions on every push / PR: Python static checks and offline unit
+tests, panel layout and interaction (Playwright), a pre-commit re-run to confirm
+the hook policy, and dependency vulnerability scanning (pip-audit). Local hooks can
+be bypassed with `--no-verify`; CI cannot — so CI is the final arbiter.
+
+Full conventions (code style, dependency policy, security red lines, PR checklist)
+are in [CONTRIBUTING.md](CONTRIBUTING.md) (Chinese).
 
 ## Security & privacy
 

@@ -1,5 +1,10 @@
 # 军师 wechat-junshi
 
+[![CI](https://github.com/1314520-lgj/wechat-junshi/actions/workflows/ci.yml/badge.svg)](https://github.com/1314520-lgj/wechat-junshi/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](requirements.txt)
+[![Windows 10/11](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4.svg)](#运行)
+
 军师是一个运行在 Windows 上的微信聊天辅助应用：它**只读**地观察当前可见的微信会话，理解文字与各类媒体内容，结合语境起草并核验候选回复，由你本人确认后填入微信输入框——**它不发送任何消息**，发送永远由你手动完成。
 
 > 这不是自动回复机器人。军师的目标是：看清上下文、说像你的话、把选择权留给你。
@@ -74,6 +79,32 @@ python -m unittest discover -s tests -p "test_*scope.py"
 ```
 
 测试覆盖窗口宽高、连续缩放、草稿保留、长设置滚动、抽屉操作、待采用建议失效、复制/填入失败及人物/卡片证据范围。Python 运行依赖不受界面测试依赖影响。
+
+## 开发
+
+**环境**：Windows 10/11 + **Python 3.12**（`rapidocr-onnxruntime==1.4.4` 声明
+`Requires-Python >=3.6,<3.13`，在 3.13 上依赖解析会失败）+ Node.js ≥ 20（仅面板检查）。
+
+```powershell
+git clone https://github.com/1314520-lgj/wechat-junshi.git
+cd wechat-junshi
+pip install -r requirements.txt -r requirements-dev.txt
+pre-commit install              # 启用提交前钩子（只需一次）
+```
+
+**提交前检查**（与 CI 同策略，合并前请确保全绿）：
+
+```powershell
+pre-commit run --all-files      # 文件卫生 + ruff + pip-audit
+ruff check .                    # 规则集与豁免理由见 pyproject.toml
+python -m unittest discover -s tests -p "test_*.py"
+```
+
+CI 在每次 push / PR 上跑四个维度：Python 静态检查与离线单元测试、面板排版与交互
+（Playwright）、提交前钩子同策略复核、依赖漏洞扫描（pip-audit）。本地钩子可以被
+`--no-verify` 绕过，CI 不能——所以 CI 才是最终裁决者。
+
+详细约定（工程风格、依赖策略、安全红线、PR 自查）见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 安全与隐私
 
