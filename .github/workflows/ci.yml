@@ -36,6 +36,30 @@ jobs:
       - name: Ruff 检查
         run: ruff check .
 
+      # 与本地 .pre-commit-config.yaml 跑同一套文件卫生检查（单一事实来源）。
+      # CI 才是最终裁决者：本地钩子可以 --no-verify 绕过，这里绕不过去。
+      #
+      # 用 `pre-commit run --all-files` 复现本地策略，而不是把每条检查抄一遍 ——
+      # 抄一遍迟早会和本地配置漂移。--show-diff-on-failure 让失败时能看到漏改。
+      #
+      # 注意：本地因 Application Control 策略禁用了 check-case-conflict 与
+      # mixed-line-ending，这里也保持一致（两者在 runner 上可跑，但「本地能过、
+      # CI 挂掉」比「两边都查同一组规则」更难排查，所以宁可两边同策略）。
+      - name: 文件卫生检查（与本地 pre-commit 同策略）
+        run: |
+          pip install pre-commit
+          pre-commit run --all-files --show-diff-on-failure
+
+      # 安全规则族（S，等价于 Bandit）已并入上面的 ruff check —— pyproject 的
+      # lint.select 里有 "S"，lint.ignore 里有逐条复核过的豁免理由（S603/S606/
+      # S310/S110/S112 是实测误报，S101 全在 selftest 里）。
+      #
+      # 这里额外跑一次**不带 pyproject 豁免**的原始扫描，只做情报展示、不判失败：
+      # 想看全貌时有用，也方便日后有人质疑「豁免是不是盖住了真问题」时对照。
+      # 注意别把这一步改成会失败的检查 —— 原始命中里 78 条全是已复核的误报。
+      - name: 安全规则情报（不判失败，仅记录）
+        run: ruff check --isolated --select S --statistics . || true
+
       # 这些用例使用虚构会话、合成画布与模拟服务，不发起网络请求，
       # 也不需要微信、真实截图或本地模型。tests/test_ocr_replay.py 会替换
       # 掉 OCR 引擎、只跑下游归属/合并/去重逻辑，因此不需要 OCR 模型权重。

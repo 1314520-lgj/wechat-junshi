@@ -1,0 +1,70 @@
+# 军师 wechat-junshi —— 换行与二进制属性
+#
+# 本仓库是 Windows 项目（PyInstaller 打包、本机运行时），历史上工作区文件
+# 多为 CRLF。直接 `* text=auto` 会在下一次 checkout 时把全库重写成 LF，
+# 产生一个覆盖几乎每个文件的无意义大 diff，因此这里**只做保守约束**：
+#
+#   1. 文本文件入库时归一为 LF（text=auto 的默认行为），工作区保持原样；
+#   2. 明确标记二进制，避免 Git 对它们做换行转换或生成文本 diff。
+#
+# 目标是「不再新增混用换行符的文件」，而不是「重写历史」。
+
+# 默认：让 Git 自行判断，文本归一入库
+* text=auto
+
+# —— 明确声明为文本，且按 LF 入库 ——
+*.py      text
+*.js      text
+*.json    text
+*.md      text
+*.toml    text
+*.yml     text
+*.yaml    text
+*.txt     text
+*.cfg     text
+*.ini     text
+*.css     text
+*.html    text
+*.sql     text
+
+# Windows 侧脚本保持 CRLF，否则批处理可能出问题
+*.bat     text eol=crlf
+*.cmd     text eol=crlf
+*.ps1     text eol=crlf
+# shell 脚本必须 LF，否则在类 Unix 环境执行会报 “bad interpreter”
+*.sh      text eol=lf
+
+# —— 二进制：禁止任何文本处理 ——
+*.exe     binary
+*.dll     binary
+*.pyd     binary
+*.so      binary
+*.zip     binary
+*.7z      binary
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.gif     binary
+*.webp    binary
+*.ico     binary
+*.icns    binary
+*.ttf     binary
+*.otf     binary
+*.woff    binary
+*.woff2   binary
+*.onnx    binary
+*.bin     binary
+*.pt      binary
+*.pth     binary
+*.model   binary
+*.db      binary
+*.sqlite3 binary
+*.dpapi   binary
+*.pdf     binary
+*.docx    binary
+*.xlsx    binary
+*.pptx    binary
+
+# —— 生成物：不参与语言统计，diff 折叠 ——
+docs/qa/*.json        linguist-generated
+engine/emoji_names.json linguist-generated

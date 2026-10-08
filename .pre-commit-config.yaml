@@ -1,0 +1,75 @@
+# 军师 wechat-junshi —— 提交前本地检查
+#
+# 目标是「本地和 CI 跑同一套策略」：这里启用的检查，CI 里都有对应步骤，
+# 反之亦然。CI 才是最终裁决者（本地钩子可以被 --no-verify 绕过）。
+#
+# 安装：
+#   pip install -r requirements-dev.txt
+#   pre-commit install
+#   pre-commit run --all-files      # 首次可能修正若干文件，再跑一次应全绿
+#
+# 维护：升级 rev 视同一次依赖变更 —— 在分支上跑 `pre-commit autoupdate`，
+# 读 changelog、跑全量检查与测试，再单独提交。
+#
+# rev 都是有意的固定版本，不要图省事写成 main。
+repos:
+  # —— 文件卫生：与 ruff 职责不重叠，只做纯文件层面的事 ——
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-yaml
+        # CI 工作流与 compose 之类的 YAML 都在这条规则下
+        files: \.(ya?ml)$
+      - id: check-json
+        files: \.(json)$
+        # docs/qa/*.json 是版本化留档，内容由脚本产出，逐字节比对过，不动它们
+        exclude: ^docs/qa/
+      - id: check-merge-conflict
+      # 不启用 check-case-conflict 与 mixed-line-ending —— 原因见文件末尾说明。
+      - id: end-of-file-fixer
+        # 二进制/字体/截图不参与
+        types_or: [python, javascript, json, yaml, markdown, toml, text]
+      - id: trailing-whitespace
+        # Markdown 行尾双空格是换行语法，保留
+        args: [--markdown-linebreak-ext=md]
+        types_or: [python, javascript, json, yaml, toml, text]
+
+  # —— Python 静态检查：规则集与豁免都在 pyproject.toml，单一事实来源 ——
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # 与 requirements-dev.txt 里的 ruff 保持同一版本，避免本地/CI 行为漂移
+    rev: v0.16.10
+    hooks:
+      - id: ruff-check
+        # 不加 --fix：本仓库不少规则是刻意豁免的，自动改写可能掩盖意图；
+        # 需要自动修复时手动跑 `ruff check --fix .`
+        #
+        # 也不要加 --force-exclude：ruff-pre-commit 的 entry 里已经带了它，
+        # 再加一次会直接报 “cannot be used multiple times” 退出码 2。
+        types_or: [python, pyi]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 两个「本该启用、但在本机不可用」的钩子，以及为什么最终没启用
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# check-case-conflict 与 mixed-line-ending 都是 pre-commit-hooks 里很有价值的
+# 检查（前者防 macOS/Windows 大小写不敏感文件系统上互相覆盖，后者防同一文件
+# 混用 CRLF/LF）。它们本身没问题，问题在本机执行环境：
+#
+#   这两个钩子的可执行文件（py_env-python3/Scripts/*.exe）被 Windows 的
+#   Application Control 策略拦截，直接 `Permission denied`，pre-commit
+#   再包装成 `[WinError 4551] An Application Control policy has blocked this
+#   file`。同一 repo 里的 check-json / end-of-file-fixer / trailing-whitespace
+#   都能正常跑，只有这两个被拦，属于环境级策略，改仓库配置解决不了。
+#
+# 「假失败」比「没有检查」更糟：一个永远红的钩子会被习惯性 --no-verify 绕过，
+# 进而把整套检查一起绕过。因此这里选择不启用，并把它们覆盖的能力用更可靠的
+# 方式补上：
+#
+#   · mixed-line-ending   →  .gitattributes 里 `* text=auto`，
+#                            入库时统一成 LF，工作区不动，比钩子更彻底。
+#   · check-case-conflict →  仅靠人工注意。若将来文件数增加，可在 CI
+#                            （ubuntu-latest，大小写敏感，原生能跑）加上：
+#                              pre-commit run check-case-conflict --all-files
+#
+# 在别的工作环境（没这条策略的 Windows、或 Linux/macOS）复现时，把这两个
+# 钩子加回来即可，其余配置无需改动。

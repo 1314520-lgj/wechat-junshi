@@ -1316,5 +1316,3 @@ if __name__ == "__main__":
     except Exception:
         flog("FATAL: " + traceback.format_exc())
         raise
-
-
