@@ -36,9 +36,19 @@ jobs:
       - name: Ruff 检查
         run: ruff check .
 
-      # 这些用例使用虚构会话与模拟服务，不发起网络请求，也不需要微信或本地模型
+      # 这些用例使用虚构会话、合成画布与模拟服务，不发起网络请求，
+      # 也不需要微信、真实截图或本地模型。tests/test_ocr_replay.py 会替换
+      # 掉 OCR 引擎、只跑下游归属/合并/去重逻辑，因此不需要 OCR 模型权重。
+      #
+      # 同时确认没有用例被跳过：若因 Python 版本漂移导致 OCR 依赖装不上，
+      # 测试模块会整体 skip，套件仍是绿的但覆盖悄悄消失。
       - name: 离线单元测试
-        run: python -m unittest discover -s tests -p "test_*.py" -v
+        run: |
+          python -m unittest discover -s tests -p "test_*.py" -v 2>&1 | tee /tmp/test.log
+          if grep -qE "skipped=" /tmp/test.log; then
+            echo "::error::有用例被跳过，请检查依赖是否安装完整"
+            exit 1
+          fi
 
   panel:
     name: 面板排版与交互检查
