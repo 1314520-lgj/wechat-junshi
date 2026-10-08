@@ -7,6 +7,16 @@ import urllib.request
 import urllib.error
 import hashlib
 _gateways={};_lock=threading.Lock()
+
+def _diag(where,exc):
+    """记录「降级但可继续」的失败；日志本身失败不得影响调用方。"""
+    try:
+        import junshi
+        junshi.flog(f'{where}: {type(exc).__name__}: {exc}')
+    except Exception:
+        pass
+
+
 class Gateway:
     def __init__(self,base,key):
         self.base=base.rstrip('/');self.key=key;self.route=None;self.guard=threading.RLock()
@@ -67,7 +77,10 @@ def connect(base,key,route):
                 if victim is None:raise RuntimeError('Harness transport capacity')
                 try:
                     _gateways[victim].server.shutdown();_gateways[victim].server.server_close()
-                except Exception:pass
+                except Exception as exc:
+                    # 关不掉的旧网关仍占着本地端口；继续淘汰并新建，
+                    # 但端口的缓慢泄漏必须可追溯。
+                    _diag('connect: cannot shut down evicted gateway',exc)
                 _gateways.pop(victim,None)
             _gateways[identity]=Gateway(base,key)
         gateway=_gateways[identity]

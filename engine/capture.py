@@ -23,6 +23,20 @@ k32 = ctypes.windll.kernel32
 gdi = ctypes.windll.gdi32
 
 
+def _diag(where, exc):
+    """记录一次「降级但可继续」的失败。
+
+    采集链路里有若干刻意的最佳努力分支（DWM 取不到就用旧 API、
+    WGC 起不来就退 PrintWindow）。这些降级会让画面质量或裁切精度
+    悄悄变化，必须在日志里留一条痕迹，否则只有肉眼能发现。
+    """
+    try:
+        import junshi
+        junshi.flog(f'{where}: {type(exc).__name__}: {exc}')
+    except Exception:
+        pass
+
+
 def exe_of(pid: int) -> str:
     h = k32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
     if not h:
@@ -76,8 +90,10 @@ def window_rect(hwnd):
     try:
         if ctypes.windll.dwmapi.DwmGetWindowAttribute(hwnd, 9, ctypes.byref(r), ctypes.sizeof(r)) == 0:
             return int(r.left), int(r.top), int(r.right), int(r.bottom)
-    except Exception:
-        pass
+    except Exception as exc:
+        # 退回 GetWindowRect 时窗口含不可见边框，裁出来的聊天区会偏一点。
+        # 这个偏差会一路传到 OCR 截图，所以必须能被追溯。
+        _diag(f'window_rect: DwmGetWindowAttribute failed, falling back ({hwnd=})', exc)
     u32.GetWindowRect(hwnd, ctypes.byref(r))
     return int(r.left), int(r.top), int(r.right), int(r.bottom)
 
@@ -376,6 +392,7 @@ def make_capture(hwnd, prefer_wgc=True):
     if prefer_wgc:
         try:
             return Capture(hwnd), "wgc"
-        except Exception:
-            pass
+        except Exception as exc:
+            # 退回 PrintWindow 会丢掉「窗口被遮挡也能采到」的能力，属于显著降级。
+            _diag(f'make_capture: WGC unavailable, falling back to PrintWindow ({hwnd=})', exc)
     return PrintCapture(hwnd), "printwindow"

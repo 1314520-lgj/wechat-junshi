@@ -19,6 +19,15 @@ u32 = ctypes.windll.user32
 gdi = ctypes.windll.gdi32
 k32 = ctypes.windll.kernel32
 
+
+def _diag(where, exc):
+    """记录「降级但可继续」的失败；日志本身失败不得影响调用方。"""
+    try:
+        import junshi
+        junshi.flog(f'{where}: {type(exc).__name__}: {exc}')
+    except Exception:
+        pass
+
 WS_POPUP = 0x80000000
 WS_EX_LAYERED = 0x00080000
 WS_EX_TRANSPARENT = 0x00000020
@@ -65,6 +74,7 @@ class YellowBorder:
         self._size = (0, 0)
         self._phase = 0.0
         self._run = True
+        self._last_paint_diag = 0.0  # 绘制失败日志的节流时间戳
         self._hinst = k32.GetModuleHandleW(None)
         cls = WNDCLASSW(
             style=0,
@@ -100,8 +110,8 @@ class YellowBorder:
         self._visible = False
         try:
             u32.ShowWindow(self._hwnd, 0)
-        except Exception:
-            pass
+        except Exception as exc:
+            _diag('Border.hide', exc)
 
     def dispose(self):
         # 不跨线程 DestroyWindow（会 SendMessage 死锁）：窗口随进程退出由系统回收。
@@ -112,8 +122,9 @@ class YellowBorder:
             if getattr(self, "_font", None):
                 gdi.DeleteObject(self._font)
                 self._font = None
-        except Exception:
-            pass
+        except Exception as exc:
+            # GDI 对象没删掉就是句柄泄漏（每实例 1 个）。
+            _diag('Border.dispose: DeleteObject(font)', exc)
 
     def _place(self):
         l, t, r, b = self._rect
@@ -131,8 +142,13 @@ class YellowBorder:
             if self._visible and self._size[0] >= 20:
                 try:
                     self._paint()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    # 绘制失败表现为「提示框不出现」，用户只会以为功能坏了。
+                    # 逐帧重试但每帧都留痕会刷爆日志，故按 5 秒节流记录。
+                    now = time.monotonic()
+                    if now - self._last_paint_diag > 5.0:
+                        self._last_paint_diag = now
+                        _diag('Border._anim: _paint failed', exc)
             time.sleep(1.0 / FPS)
 
     def _paint(self):

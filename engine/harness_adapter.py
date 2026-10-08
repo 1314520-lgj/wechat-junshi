@@ -10,6 +10,14 @@ VERSION='0.1.5rc1'
 _lock=threading.RLock();_instances={};_status={'state':'idle','version':VERSION,'tools':'read_observations_only'}
 def status():return dict(_status)
 
+def _diag(where,exc):
+    """记录「降级但可继续」的失败；日志本身失败不得影响调用方。"""
+    try:
+        import junshi
+        junshi.flog(f'{where}: {type(exc).__name__}: {exc}')
+    except Exception:
+        pass
+
 def prune_sessions(home,days=7):
     """清理 Harness SDK 落盘的会话日志（含发往云端模型的聊天上下文）。
 
@@ -28,11 +36,13 @@ def prune_sessions(home,days=7):
                 try:
                     if session_dir.name.startswith('junshi-') and session_dir.stat().st_mtime<cutoff:
                         shutil.rmtree(session_dir,ignore_errors=True);removed+=1
-                except OSError:
-                    pass
+                except OSError as exc:
+                    # 单个目录清不掉（被占用/权限不足）不影响其余目录继续清；
+                    # 但这是隐私清理，失败必须留痕，否则会静默堆积。
+                    _diag(f'prune_sessions: cannot remove {session_dir.name!r}',exc)
         if removed:_status['pruned_sessions']=removed
-    except Exception:
-        pass
+    except Exception as exc:
+        _diag('prune_sessions: aborted',exc)
 
 def advertised_tools(events):
     names=set()
@@ -54,7 +64,10 @@ def close_all():
     with _lock:
         for harness in _instances.values():
             try:harness.close()
-            except Exception:pass
+            except Exception as exc:
+                # 退出路径不能让单个子进程关不掉而卡住整个关闭流程，
+                # 但残留进程会占端口/内存，必须留痕。
+                _diag('close_all: harness.close() failed',exc)
         _instances.clear();_status['state']='stopped'
 
 def _complete(key,model,system,turns,home,timeout,cancel=None,max_tokens=1200,base='https://api.deepseek.com',observations=None):
@@ -78,7 +91,9 @@ def _complete(key,model,system,turns,home,timeout,cancel=None,max_tokens=1200,ba
             if len(_instances)>=4:
                 oldest=next(iter(_instances))
                 try:_instances[oldest].close()
-                except Exception:pass
+                except Exception as exc:
+                    # 关不掉的旧实例仍占子进程；继续淘汰但留痕。
+                    _diag('_complete: close evicted harness instance',exc)
                 _instances.pop(oldest,None)
             harness=DeepSeekHarness(profile='sdk-minimal',model=model,provider='deepseek-official',reasoning_effort='off',api_key=key,base_url=base,cwd=str(working),dsh_home=str(Path(home)/'harness'),patches=(str(patch),),max_tokens=max(1200,max_tokens),initialize_timeout_seconds=20,request_timeout_seconds=timeout,shutdown_timeout_seconds=1)
             _instances[identity]=harness
@@ -105,8 +120,10 @@ def _complete(key,model,system,turns,home,timeout,cancel=None,max_tokens=1200,ba
         done.set()
         try:
             close_safely()
-        except Exception:
-            pass
+        except Exception as exc:
+            # 主异常正在向上抛，这里再抛会盖住根因；但清理失败本身也要留痕，
+            # 否则「损坏实例为何还在」会变成无解谜题。
+            _diag('_complete: close_safely failed while handling another error',exc)
         with _lock:
             # close 抛错也不能跳过淘汰：损坏实例被永久缓存会让后续同 identity 调用持续失败。
             _instances.pop(identity,None);_status['state']='cancelled' if cancel and cancel() else 'fallback'

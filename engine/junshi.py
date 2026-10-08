@@ -111,6 +111,20 @@ def flog(msg):
     except Exception:
         pass
 
+
+def _diag(where, exc):
+    """记录一次「可接受但值得留痕」的失败。
+
+    引擎里大量 try/except 是刻意的降级分支（可选组件缺失、清理动作失败、
+    最佳努力的状态写入）。这些分支不该中断主流程，但也不能彻底静默——否则
+    线上出问题时日志里连「哪一步降级了」都看不到。此处统一走 flog，
+    并保证日志本身失败不会反过来炸掉调用方。
+    """
+    try:
+        flog(f'{where}: {type(exc).__name__}: {exc}')
+    except Exception:
+        pass
+
 DEFAULT_CONFIG = {
     "relationship": "恋人",
     "style": "",
@@ -178,8 +192,10 @@ if not API_KEY:
     try:
         from securestore import read_json
         API_KEY = str(read_json(os.path.join(DSH_HOME, "api-key.dpapi")).get("key") or "")
-    except Exception:
-        pass
+    except Exception as exc:
+        # 密钥文件不存在是正常首次启动；但 DPAPI 解密失败/文件损坏必须留痕，
+        # 否则用户只会看到「未设置 API 密钥」，无从判断是没配还是配坏了。
+        flog(f"api-key.dpapi 读取失败：{type(exc).__name__}: {exc}")
 
 if not API_KEY and not os.environ.get("JUNSHI_STANDALONE"):
     # 回退：直接读 DSH 官方凭据文件（与 ctx.credentials.resolve('DEEPSEEK_API_KEY') 同源）。
@@ -192,8 +208,12 @@ if not API_KEY and not os.environ.get("JUNSHI_STANDALONE"):
                 if _m:
                     API_KEY = _m.group(1).strip()
                     break
-    except Exception:
-        pass
+    except FileNotFoundError:
+        pass  # 没有回退凭据文件是常态
+    except Exception as exc:
+        # 文件在但读不出来（权限/编码/YAML 损坏）需要留痕，否则同样会被
+        # 误当成「用户没配密钥」。
+        flog(f".credentials.yaml 回退读取失败：{type(exc).__name__}: {exc}")
 
 
 def log(msg):
@@ -468,8 +488,8 @@ def capture_loop(border_box, stop):
                 if cap is not None:
                     try:
                         cap.stop()
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        _diag('capture_loop: stop old capture on window change', exc)
                 cap_hwnd = hwnd
                 try:
                     try:
@@ -636,8 +656,9 @@ def capture_loop(border_box, stop):
     if cap is not None:
         try:
             cap.stop()
-        except Exception:
-            pass
+        except Exception as exc:
+            # 采集线程退出前的最后一次释放；失败会留下 WGC 会话不关。
+            _diag('capture_loop: final cap.stop()', exc)
     set_status("stopped")
 
 
@@ -712,8 +733,9 @@ def hotkey_loop(stop):
                 time.sleep(0.05)
         try:
             u32.UnregisterHotKey(None, HOTKEY_ID)
-        except Exception:
-            pass
+        except Exception as exc:
+            # 热键不注销会占住 Ctrl+Alt+F，下次启动注册不上。
+            _diag('hotkey_loop: UnregisterHotKey', exc)
     except Exception as e:
         log(f"热键线程异常：{' '.join(str(e).split())[:100]}")
 
@@ -800,8 +822,10 @@ def run_analysis(msgs, cfg, guard):
         HOTKEY_CYCLE["index"] = -1  # 新候选：热键从推荐条重新开始
         # 提醒用户回来看建议：任务栏闪烁 DSH 窗口
         threading.Thread(target=flash_dsh_window, daemon=True).start()
-        # 后台更新长期记忆（不阻塞回复流程；失败静默）
-        if False:  # model hypotheses must never become confirmed memory
+        # 后台更新长期记忆已停用：模型推断出的事实不得直接写成「已确认记忆」，
+        # 必须经用户显式确认（见 /memory-confirm）。保留分支以示演进脉络，
+        # 但整段不可达，故不再挂可观测性代码。
+        if False:  # pragma: no cover - model hypotheses must never become confirmed memory
             def _remember():
                 try:
                     from memory import extract
@@ -809,8 +833,8 @@ def run_analysis(msgs, cfg, guard):
                     with _lock:
                         if got and STATE["analysis"] and STATE["analysis"].get("session") == contact:
                             STATE["analysis"]["memory_facts"] = len(got.get("facts") or [])
-                except Exception:
-                    pass
+                except Exception as exc:
+                    _diag('run_analysis._remember', exc)
             threading.Thread(target=_remember, daemon=True).start()
     except InterruptedError:
         pass
@@ -1253,8 +1277,10 @@ def main():
             f.write(str(actual))
         with open(os.path.join(DSH_HOME, ".dsh-junshi.port"), "w", encoding="utf-8") as f:
             f.write(str(actual))
-    except Exception:
-        pass
+    except Exception as exc:
+        # 端口文件是宿主发现引擎的唯一途径。写不进去引擎仍能跑，但宿主会
+        # 「找不到引擎」，因此这条必须留痕，否则现场只有一句连接失败。
+        flog(f"端口文件写入失败（宿主可能无法发现引擎）：{type(exc).__name__}: {exc}")
     server.capture_thread = t
     log(f"HTTP API: 127.0.0.1:{actual}")
     flog(f"bound port {actual}")
@@ -1278,8 +1304,8 @@ def main():
         if b:
             try:
                 b.dispose()
-            except Exception:
-                pass
+            except Exception as exc:
+                _diag('main: border dispose', exc)
 
 
 if __name__ == "__main__":
