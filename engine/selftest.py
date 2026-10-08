@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """引擎离线自测：解析器 + 提示词构建，不联网。"""
 import os
 import sys

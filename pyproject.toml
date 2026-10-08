@@ -1,0 +1,50 @@
+# 军师 wechat-junshi —— 工具链配置
+#
+# 本仓库以「源码 + 安装目录覆盖」的方式运行，打包由私有流程用 PyInstaller 完成。
+# 因此这里只声明 [tool.*] 工具配置，不定义 [project] / [build-system]，
+# 避免 pip 或打包工具把仓库当成可安装包处理。
+
+[tool.ruff]
+target-version = "py312"
+# 代码库刻意采用紧凑单行风格（`if x: return`），行宽不参与判定
+line-length = 200
+extend-exclude = [".git", "node_modules", "test-results", "playwright-report"]
+
+[tool.ruff.lint]
+# 只启用「能抓到真实缺陷」的规则族，不引入纯风格争议
+select = [
+  "E4",  # import 语句错误
+  "E7",  # 语句级错误（bare except、与字面量比较等）
+  "E9",  # 语法与运行时错误
+  "F",   # pyflakes：未使用导入/变量、未定义名称、重复定义
+  "UP",  # pyupgrade：过时写法
+  "B",   # flake8-bugbear：常见缺陷模式
+  "C4",  # flake8-comprehensions
+  "RUF", # Ruff 自有规则
+]
+
+ignore = [
+  # —— 本项目刻意保留的写法 ——
+  "E402", # 多处先 sys.path.insert 再导入，顺序有意为之
+  "E501", # 紧凑单行风格，不做行宽限制
+  "E701", # 单行 if/return
+  "E702", # 单行分号
+  "E731", # lambda 赋值
+  "E741", # 短变量名（图形/坐标代码中常见）
+  # —— 中文文本与全角标点是本项目的正常内容，不做 ASCII 歧义字形检查 ——
+  "RUF001", # 字符串中的歧义 Unicode 字符
+  "RUF002", # 文档字符串中的歧义 Unicode 字符
+  "RUF003", # 注释中的歧义 Unicode 字符
+  # —— 已知问题，暂缓处理，留作后续改进（不阻塞 CI）——
+  "B007",   # 循环变量未使用
+  "B904",   # except 内 raise 未用 from
+  "B905",   # zip() 未指定 strict
+  "RUF005", # 集合字面量拼接（[a] + [b]）
+  "RUF046", # 多余的 int() 转换
+  "RUF059", # 解包变量未使用
+]
+
+[tool.ruff.lint.per-file-ignores]
+# 自检 / 冒烟脚本会刻意导入符号以验证其可用性，属预期行为
+"engine/selftest*.py" = ["F401"]
+"engine/smoke_*.py" = ["F401"]

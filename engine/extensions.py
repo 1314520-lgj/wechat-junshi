@@ -1,6 +1,15 @@
 """Versioned local hooks. Disabled unless user enables named, trusted extensions."""
 from pathlib import Path
-import contextlib,importlib.util,io,json,re,subprocess,sys,hashlib,ast,os
+import contextlib
+import importlib.util
+import io
+import json
+import re
+import subprocess
+import sys
+import hashlib
+import ast
+import os
 
 API_VERSION='1.0'
 
@@ -96,7 +105,6 @@ def run_hooks(directory,enabled,messages,context):
             warnings.append('扩展 '+key+' 尚未通过验证或代码已变更，已停用');continue
         try:
             request={'entry':available[key]['entry'],'messages':messages,'context':context}
-            import os
             environment=worker_environment()
             result=subprocess.run([sys.executable,'-X','utf8',str(Path(__file__).resolve()),'--worker'],env=environment,
                 input=json.dumps(request,ensure_ascii=False),capture_output=True,text=True,encoding='utf-8',

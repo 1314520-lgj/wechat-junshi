@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """找微信窗口 + 采集帧 + 从帧里定位消息区。基于 JevChat-Windows（MIT）二次开发。
 
 主路：Windows Graphics Capture（被遮挡也能截 GPU 合成窗口）。

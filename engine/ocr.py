@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """消息区截图 → 谁说了什么 + 什么时候说的 + 是不是表情包。RapidOCR 吃 numpy，不落盘。
 （基于 JevChat-Windows，MIT，二次开发：新增 2x 提速、时间识别、表情包/图片识别）"""
 import difflib

@@ -1,5 +1,7 @@
 """Conservative composer/header pixel witnesses; never proves latest position."""
-import hashlib,time,threading
+import hashlib
+import time
+import threading
 from collections import OrderedDict
 import numpy as np
 import cv2

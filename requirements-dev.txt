@@ -1,0 +1,5 @@
+# 开发与 CI 工具链（仅用于静态检查与离线单元测试；运行时与打包均不依赖）
+# 运行时依赖见 requirements.txt
+ruff==0.16.10
+# tests/ 下的单元测试会沿 engine → vision → media 触达 PIL
+Pillow>=11.1.0

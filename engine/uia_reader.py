@@ -1,5 +1,8 @@
 """Bounded read-only UIA context confined to the requested process and window."""
-import copy,queue,threading,time
+import copy
+import queue
+import threading
+import time
 from collections import OrderedDict,deque
 _cache=OrderedDict();_cache_lock=threading.Lock()
 # 单飞用 owner-token 而不是普通锁：worker 线程被目标程序 UIA 永久挂起时，

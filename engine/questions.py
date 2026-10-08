@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Jev 判断题目集 + DeepSeek JSON 化的提问/解析。
 （题目口径来自 JevChat-Windows / jev-chat-JARVIS，MIT）
 

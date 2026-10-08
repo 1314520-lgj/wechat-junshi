@@ -1,6 +1,15 @@
 """Cancellable local socket reads with Python's standard HTTP/JSON parsers."""
-import http.client,io,json,select,time,urllib.parse,urllib.error
-import os,subprocess,threading,socket
+import http.client
+import io
+import json
+import select
+import time
+import urllib.parse
+import urllib.error
+import os
+import subprocess
+import threading
+import socket
 from pathlib import Path
 
 MAX_JSON_BYTES=1024*1024

@@ -1,5 +1,12 @@
 """Explicit local file import: video frame samples and independent CPU speech decoding."""
-import base64,io,json,os,subprocess,sys,tempfile,threading
+import base64
+import io
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import threading
 from pathlib import Path
 _lock=threading.Lock()
 MAX_BYTES=20*1024*1024
@@ -61,8 +68,8 @@ def analyze_upload(body,settings,key,progress=None):
 def decode_file(path):
     root=Path(__file__).resolve().parent.parent
     sys.path.insert(0,str(root/'media-runtime'))
-    import imageio_ffmpeg,re
-    from PIL import Image
+    import imageio_ffmpeg
+    import re
     executable=imageio_ffmpeg.get_ffmpeg_exe()
     metadata=subprocess.run([executable,'-nostdin','-i',str(path)],capture_output=True,timeout=15,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0)).stderr.decode('utf-8','replace')
     match=re.search(r'Duration: (\d+):(\d+):(\d+(?:\.\d+)?)',metadata)
@@ -82,7 +89,6 @@ def decode_file(path):
         model_dir=root/'models'/'whisper-small'
         if not (model_dir/'model.bin').is_file():warnings.append('本地语音模型尚未安装，语音内容保持未知')
         else:
-            import numpy as np
             from faster_whisper import WhisperModel
             samples=decode_audio_prefix(executable,path)
             if len(samples):

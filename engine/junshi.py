@@ -17,7 +17,6 @@ import threading
 import time
 import traceback
 import urllib.parse as up
-import urllib.request
 import uuid
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -86,17 +85,17 @@ def _trace(msg):
 
 _trace(f"start pid={os.getpid()} cwd={os.getcwd()} py={sys.version.split()[0]}")
 _trace("importing border/capture/engine/ocr...")
-import content  # noqa: E402
-from border import YellowBorder  # noqa: E402
+import content
+from border import YellowBorder
 _trace("border ok")
-from capture import (Capture, PrintCapture, chat_area, find_chat_hwnd,  # noqa: E402
-                     unminimize, window_rect, make_capture)
+from capture import (Capture, chat_area, find_chat_hwnd,
+                     window_rect, make_capture)
 _trace("capture ok")
-from engine import analyze, display_judgment  # noqa: E402
+from engine import analyze, display_judgment
 _trace("engine ok")
-from fill import fill as fill_into  # noqa: E402
+from fill import fill as fill_into
 _trace("fill ok")
-from ocr import Reader, read_title, similar  # noqa: E402
+from ocr import Reader, read_title
 _trace("ocr(rapidocr) ok")
 
 DSH_HOME = os.environ.get("DSH_HOME") or os.path.join(os.path.expanduser("~"), ".dsh")
@@ -285,7 +284,6 @@ def set_startup(enabled):
 
 
 def contact_preferences_path(name):
-    import hashlib
     return os.path.join(DSH_HOME, "contact-preferences", hashlib.sha256(name.encode("utf-8")).hexdigest() + ".dpapi")
 
 def restore_contact_preferences(name):
@@ -614,7 +612,6 @@ def capture_loop(border_box, stop):
                         for message_index,(w, n, t, tm, k) in enumerate(new):
                             msg = {"from": w, "text": t, "name": n if w == "her" else None,
                                    "time": tm, "kind": k}
-                            from content import annotate
                             media_id=reader.new_media_ids[message_index]
                             if media_id:msg['media_id']=media_id
                             msg=__import__('evidence').store(DSH_HOME).observe(msg,title,reader.new_evidence[message_index])
@@ -722,7 +719,6 @@ def hotkey_loop(stop):
 
 
 def message_signature(messages,visual_only=False):
-    import hashlib
     fields=('from','name','text','time','kind','media_id') if visual_only else ('from','name','text','time','kind','media_id','speaker_id')
     rows=[tuple(m.get(k) for k in fields) for m in messages]
     return hashlib.sha256(json.dumps(rows,ensure_ascii=False).encode()).hexdigest()

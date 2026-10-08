@@ -1,6 +1,8 @@
 """Reversible update migration; preserve keys and disable automatic input."""
 from pathlib import Path
-import os,json,shutil
+import os
+import json
+import shutil
 home=Path(os.environ['LOCALAPPDATA'])/'Junshi'
 path=home/'.dsh-junshi.json'
 if path.exists():

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """OCR 新特性离线自测：时间识别 + 表情包识别 + 2x 提速（合成帧，不碰真实微信）。"""
 import os
 import sys

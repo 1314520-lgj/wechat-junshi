@@ -4,6 +4,7 @@
   "private": true,
   "description": "Synthetic layout checks for the Junshi web panel; no production Node dependency",
   "scripts": {
+    "test": "npm run test:layout && npm run test:actions",
     "test:layout": "node tests/test_responsive.cjs",
     "test:actions": "node tests/test_final_actions.cjs"
   },

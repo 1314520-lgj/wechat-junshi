@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """狗头军师（goutoujunshi，MIT，https://github.com/shengjidaguai-china/goutoujunshi）技能层。
 
 把「先接住情绪 → 分清事实 → 给能执行的选择」与安全边界折成轻量提示片段，

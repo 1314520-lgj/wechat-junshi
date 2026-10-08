@@ -40,7 +40,6 @@ Read-only by construction: this module only reads pixels and window geometry.
 It contains no input, focus, click, clipboard, or send path, and tests assert
 that by source inspection.
 """
-import sys
 import time
 
 _FORBIDDEN_SOURCE = (
@@ -75,7 +74,7 @@ def source_is_read_only(path=None):
     import os
     path = path or os.path.abspath(__file__)
     try:
-        with open(path, "r", encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             tree = ast.parse(fh.read(), filename=path)
     except Exception:
         return False
@@ -264,7 +263,7 @@ def confirm_frame_current(hwnd, engine_frame, engine_frame_at, stale_after=900.0
     # catch a dead capture, and it is not the freshness test.
     if age > float(stale_after):
         out = _unverified(
-            "画面已过期（%.1f 秒前），无法核对是否位于最新位置" % age, **diag)
+            f"画面已过期（{age:.1f} 秒前），无法核对是否位于最新位置", **diag)
         out["frame_is_current"] = False
         out["capture_live"] = False
         return out

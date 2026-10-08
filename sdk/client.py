@@ -1,5 +1,8 @@
 """Same-user local Junshi API client. Never print/store the controller token."""
-import json,os,sys,urllib.request
+import json
+import os
+import sys
+import urllib.request
 from pathlib import Path
 
 class Client:

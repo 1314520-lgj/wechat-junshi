@@ -9,7 +9,6 @@ def inspect_input(frame,area):
     crop=frame[y1+10:h-toolbar_height,x0+12:x1-12]
     if crop.shape[0]<35 or crop.shape[1]<100:return False,'无法可靠定位输入区'
     res,_=_engine()(crop,use_cls=False)
-    allowed=('按住鼠标','语音输入','按住空格','输入消息','发送消息')
     placeholders={'按住说话','按住鼠标说话','按住鼠标语音输入文字','按住空格说话','输入消息','发送消息'}
     for box,text,_ in res or []:
         if not text.strip():continue

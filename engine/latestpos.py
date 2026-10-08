@@ -390,7 +390,7 @@ def probe(hwnd, frame=None, rect=None, list_box=None, background=30, timeout=_PR
                     result['subtree_found'] = node is not None
                     result['rows_visited'] = len(rows)
             except Exception as exc:
-                result = _unverified('无法读取窗口结构：%s' % type(exc).__name__)
+                result = _unverified(f'无法读取窗口结构：{type(exc).__name__}')
             state['result'] = result
             with _lock:
                 _cache[key] = (time.monotonic(), result)
@@ -399,7 +399,7 @@ def probe(hwnd, frame=None, rect=None, list_box=None, background=30, timeout=_PR
             state['event'].set()
         try:
             threading.Thread(target=worker, daemon=True).start()
-        except Exception as exc:
+        except Exception:
             # 线程起不来时清掉 in-flight 状态，否则该 key 从此每次调用都空等超时。
             with _lock:
                 if _inflight.get(key) is state:

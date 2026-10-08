@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Per-chat-app profile. 基于 JevChat-Windows（MIT，https://github.com/jev-chat/jev-chat-windows）二次开发。
 
 本引擎只认微信（WeChat 4.x，进程 weixin.exe，主窗口标题「微信」）。
@@ -6,7 +5,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable
+from collections.abc import Callable
 
 import numpy as np
 

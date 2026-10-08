@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """长期记忆档案（狗头军师「长期记忆」概念的轻量实现）。
 
 每个联系人一份 JSON（DSH_HOME/.dsh-junshi-memory/<contact>.json）：

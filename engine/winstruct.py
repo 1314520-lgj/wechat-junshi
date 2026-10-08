@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """ctypes.wintypes 缺的 Win32 结构与 GDI 声明（64 位安全：句柄/指针全部显式声明）。"""
 import ctypes
 from ctypes import wintypes as w

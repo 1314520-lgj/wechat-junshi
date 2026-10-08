@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """新证据链自测：心理/意图/依据/适合度/危险度/建议动作 每项挂证据 + 更像人的候选。"""
 import json
 import os
@@ -7,8 +6,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "vendor"))
 
-import junshi  # noqa: F401（读 API_KEY，并把 stdout 重定向到日志文件）
-from engine import analyze, display_judgment  # noqa: E402
+import junshi  # 导入即读取 API_KEY，并把 stdout 重定向到日志文件
+from engine import analyze, display_judgment
 
 msgs = [
     {"from": "her", "text": "你昨天是不是又忘了给我带奶茶", "time": "昨天 18:02"},

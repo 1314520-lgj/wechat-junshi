@@ -1,5 +1,10 @@
 """Small process-only cache of already verified results for identical evidence."""
-import copy,hashlib,inspect,json,threading,time
+import copy
+import hashlib
+import inspect
+import json
+import threading
+import time
 from collections import OrderedDict
 from pathlib import Path
 _entries=OrderedDict();_lock=threading.Lock();TTL=60;CAPACITY=8

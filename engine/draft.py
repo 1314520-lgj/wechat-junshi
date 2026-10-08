@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """起草 3 条候选回复。走 DeepSeek；默认带着 Jev 的判断写（guidance），拿不到就盲起草。
 （基于 JevChat-Windows，MIT）"""
 from __future__ import annotations

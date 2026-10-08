@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """把选中的候选填进微信输入框：写剪贴板 → 点输入框 → Ctrl+V。
 绝不发回车、绝不点发送。（基于 JevChat-Windows，MIT）"""
 import ctypes

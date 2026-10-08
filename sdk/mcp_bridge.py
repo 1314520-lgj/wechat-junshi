@@ -1,5 +1,6 @@
 """Minimal newline-JSON MCP stdio bridge; sends no WeChat messages."""
-import json,sys
+import json
+import sys
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 from client import Client

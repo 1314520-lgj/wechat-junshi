@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """OCR/读取时微信窗口边缘的黄色提示框：置顶、穿透点击、不抢焦点。
 
 分层窗口逐像素 alpha：一圈黄色圆角描边（呼吸光晕 + 流动虚线），中间完全透明，
@@ -13,8 +12,7 @@ import time
 import numpy as np
 
 import winstruct as ws
-from winstruct import (BITMAPINFO, BLENDFUNCTION, DWORD, HANDLE, HDC, HWND, LPARAM,
-                       LPWSTR, LRESULT, POINT, RECT, SIZE, UINT, WNDCLASSW, WNDPROC, WPARAM)
+from winstruct import (BITMAPINFO, BLENDFUNCTION, POINT, RECT, SIZE, UINT, WNDCLASSW, WNDPROC)
 
 ws.declare()
 u32 = ctypes.windll.user32

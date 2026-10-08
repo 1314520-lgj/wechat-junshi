@@ -1,8 +1,22 @@
+# —— Python ——
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
+.venv/
+venv/
+env/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+pip-wheel-metadata/
+*.whl
 
-# 私人数据与运行时（绝不提交）
+# —— 打包产物（PyInstaller）——
+build/
+dist/
+*.spec
+
+# —— 私人数据与运行时（绝不提交）——
 *.dpapi
 *.sqlite3
 *.jsonl
@@ -13,7 +27,7 @@ dev-data/
 test-data/
 backups/
 
-# 大型二进制与第三方运行时（不随源码提交）
+# —— 大型二进制与第三方运行时（不随源码提交）——
 models/
 packages/
 runtime/
@@ -23,13 +37,22 @@ media-runtime/
 *.dll
 *.pyd
 
-# 系统与编辑器
+# —— 编辑器 / 系统 ——
 .DS_Store
 Thumbs.db
+desktop.ini
 .idea/
 .vscode/
+*.bak
+*.orig
+*.rej
+*~
 
-# UI development checks
+# —— UI 检查产物 ——
 node_modules/
 test-results/
 playwright-report/
+
+# —— 源码备份文件兜底（历史上曾误提交 lib/panel.backup-*.js）——
+lib/*.backup-*.js
+lib/*.before-*.js

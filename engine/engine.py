@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """整条链的唯一入口：对话 → Jev 判断 → 带着判断起草 3 条 → 排序 → 结构化结果。
 
 三段式（与 JevChat-Windows 同口径，判断/排序改用 DeepSeek JSON）：
@@ -305,7 +304,8 @@ def _analyze_uncached(*args, **kwargs):
         return result
 
 def analyze(*args,**kwargs):
-    import os,replycache
+    import os
+    import replycache
     settings=dict(kwargs.get('settings') or {});cancel=settings.get('_cancel')
     if cancel and cancel():raise InterruptedError('旧任务已取消')
     home=settings.get('_home') or os.environ.get('DSH_HOME') or os.path.join(os.environ.get('LOCALAPPDATA','.'),'Junshi')

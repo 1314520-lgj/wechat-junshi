@@ -1,5 +1,6 @@
 """Independent finite-time gate for suggestions; never grants input authority."""
-import math,time
+import math
+import time
 ADVICE_TTL_SECONDS=300
 
 def advice_fresh(analysis,now=None):

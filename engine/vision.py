@@ -1,7 +1,10 @@
 """Explicitly configured OpenAI-compatible vision interface; no default provider."""
-import json,urllib.request,urllib.parse,time
+import json
+import urllib.request
+import urllib.parse
+import time
 import modelrouter
-from content import classify, KINDS, CARD_KINDS, card_details, card_kind
+from content import classify, CARD_KINDS, card_details, card_kind
 from media import get,description,save_description
 VISION_KINDS=['text','image','video','audio','quoted','sticker','emoji','group_notice','poll','relay','media_unknown']+sorted(CARD_KINDS)
 VISION_CACHE_VERSION='visible-evidence-v6'

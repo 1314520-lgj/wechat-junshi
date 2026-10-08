@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """升级后的智能链路自测：判断(deepseek-chat) + 记忆提取 + 排序看完整对话。"""
 import json
 import os
@@ -8,8 +7,8 @@ import urllib.request
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "vendor"))
 
-import junshi  # noqa: F401  (读 API_KEY)
-from memory import extract, load_memory  # noqa: E402
+import junshi
+from memory import extract, load_memory
 
 API_KEY = junshi.API_KEY
 msgs = [
