@@ -1,0 +1,41 @@
+{
+  "passed": true,
+  "checks": 25,
+  "details": [
+    "failed fill keeps current edited reply",
+    "failed fill focuses actionable copy fallback",
+    "failed fill exposes no generic regeneration retry",
+    "failed copy shows inline repeat/manual-copy action",
+    "failed copy remains enabled and focused",
+    "failed copy also exposes no regeneration retry",
+    "copy retry uses current edit",
+    "fill/copy failures and recovery generate no model calls",
+    "manual result waits while preserving user edit",
+    "accepting valid manual result displays new reply",
+    "accepting valid manual result clears stale warning",
+    "source edit invalidates pending manual result",
+    "queued latest click cannot accept prior-source result",
+    "source edit preserves draft and marks it stale",
+    "target change invalidates pending result and preserves edit",
+    "tone change invalidates pending result without replacing edit",
+    "relationship change invalidates pending result",
+    "live pending reply survives manual context changes",
+    "live latest still applies correct pending result",
+    "valid manual pending reply survives mode switch",
+    "restored valid manual latest clears stale warning",
+    "manual mode retains copy-only actions",
+    "automatic filling remains absent",
+    "UI issued only one explicit fill and no forced regeneration",
+    "no browser errors"
+  ],
+  "baseline_checks": [
+    "1.5.69 fill retry incorrectly starts regeneration",
+    "1.5.69 accepting current manual result leaves stale warning",
+    "1.5.69 source edit leaves prior pending result available",
+    "1.5.69 prior-source pending result replaces current edited reply"
+  ],
+  "synthetic_data_only": true,
+  "all_api_responses_mocked": true,
+  "no_real_model_calls": true,
+  "no_wechat_actions": true
+}

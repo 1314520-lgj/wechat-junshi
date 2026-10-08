@@ -4,7 +4,7 @@ Junshi is a Windows desktop assistant that **observes** the currently visible We
 
 > Not an auto-reply bot. Junshi's goal: understand the context, sound like you, and leave the choice to you.
 
-Current version: **1.5.69**. The interface adapts to window width and height, switches between columns and a stacked layout, keeps drafts while resizing, and keeps the settings close button reachable. See [release notes](docs/1.5.69.md) (Chinese).
+Current version: **1.5.70**. The interface adapts to window width and height, switches between columns and a stacked layout, keeps drafts while resizing, and keeps the settings close button reachable. See [release notes](docs/1.5.70.md) (Chinese).
 
 ## Highlights
 
@@ -81,3 +81,5 @@ For personal study and expression assistance only. Make sure your use complies w
 ---
 
 Chinese README: [README.md](README.md) · 问题与建议请在 [Issues](https://github.com/1314520-lgj/wechat-junshi/issues) 提出，欢迎 PR。
+
+Version 1.5.70 preserves speaker ownership when reusing verified advice, scopes payment and entry completion to the current card, invalidates pending advice when manual context changes, and keeps fill/copy failures separate from model regeneration. See [release notes](docs/1.5.70.md).

@@ -3,8 +3,8 @@ import copy,hashlib,inspect,json,threading,time
 from collections import OrderedDict
 from pathlib import Path
 _entries=OrderedDict();_lock=threading.Lock();TTL=60;CAPACITY=8
-# 消息里只有这些字段代表「可见证据本身」；observed_at/sequence/speaker_id/evidence 等
-# 观察元数据每次都变，不能进缓存键，否则同一证据重新观察后永远打不中缓存/飞行合并。
+# 观察时间、序号和原始证据 ID 每次都变，不直接进键。人物 ID 用下面的
+# 相等分组保留归属关系，避免随机 ID 使同一证据永远打不中缓存/飞行合并。
 _MESSAGE_KEY_FIELDS=('from','text','kind','media_description','thumbnail_description',
     'media_transcript','media_association_source','media_understanding_complete',
     'transcript_confirmation','vision_uncertain','vision_confidence','content_source','time','who',
@@ -26,9 +26,16 @@ def key_for(fn,args,kwargs,home,allow_unresolved=False):
     values=inspect.signature(fn).bind_partial(*args,**kwargs);values.apply_defaults();v=dict(values.arguments)
     settings=dict(v.get('settings') or {})
     if settings.get('enabled_extensions') or settings.get('_force_fresh'):return None
+    messages=v.get('messages',[])
+    if any(not isinstance(m,dict) or (m.get('speaker_id') is not None and not isinstance(m['speaker_id'],str)) for m in messages):return None
+    # Analyze supplies defaults only for absent identity fields. In particular,
+    # an absent speaker_id becomes observation-*; explicit None stays missing.
+    from content import annotate
+    speakers=annotate(messages,settings.get('_session',''))
+    confirmed={m['speaker_id'] for m in speakers if m.get('identity_confidence')=='user_confirmed' and m.get('speaker_id')}
+    speaker_groups={}
     cleaned=[]
-    for m in v.get('messages',[]):
-        if not isinstance(m,dict):return None
+    for m,identity in zip(messages,speakers):
         visual=None
         if not allow_unresolved and m.get('kind') in ('media_unknown','image','video','audio','sticker') and (not m.get('media_description') or m.get('vision_uncertain') or m.get('media_understanding_complete') is False):
             # An explicitly uncertain supplied observation remains uncertain.
@@ -36,10 +43,16 @@ def key_for(fn,args,kwargs,home,allow_unresolved=False):
             visual=cached_visual_evidence(m,settings)
             if visual is None:return None
         row={k:m[k] for k in _MESSAGE_KEY_FIELDS if k in m}
-        # Random observation IDs change each read. Explicitly confirmed speaker
-        # links affect source ownership and must distinguish cached advice.
-        if m.get('identity_confidence')=='user_confirmed' and m.get('speaker_id'):
-            row['speaker_id']=m['speaker_id']
+        # Match replycheck.same_observed_speaker: ordinary IDs are equality
+        # groups, while two unconfirmed observation-* sentinels are compatible
+        # regardless of their random suffixes. A link to a confirmed ID still
+        # needs its absolute value, even on an unconfirmed message.
+        speaker=identity.get('speaker_id')
+        if not speaker:row['speaker_relation']=['missing']
+        elif identity.get('identity_confidence')=='user_confirmed':row['speaker_id']=speaker
+        elif speaker in confirmed:row['speaker_relation']=['confirmed_link',speaker]
+        elif speaker.startswith('observation-'):row['speaker_relation']=['observation']
+        else:row['speaker_relation']=['candidate',speaker_groups.setdefault(speaker,len(speaker_groups))]
         if visual is not None:row['cached_visual_evidence']=visual
         cleaned.append(row)
     v['messages']=cleaned
