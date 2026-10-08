@@ -2,6 +2,19 @@
 # 运行时依赖见 requirements.txt
 ruff==0.16.10
 
+# 供应链安全扫描：查依赖清单有没有已知 CVE/GHSA。
+# 固定版本，理由同 ruff —— 漏洞库与判定逻辑的变化应该是可预期的动作，
+# 而不是某天早上 CI 突然变红。
+#
+# 注意用 Python 3.12：本项目依赖 rapidocr-onnxruntime==1.4.4 声明
+# Requires-Python >=3.6,<3.13，在 3.13 下 pip-audit 解析 requirements.txt
+# 会在依赖解析阶段就失败（报 "Could not find a version that satisfies
+# the requirement"，容易被误读成包不存在）。
+pip-audit==2.10.1
+
+# 提交前钩子（与 .pre-commit-config.yaml 配套）
+pre-commit==4.6.2
+
 # tests/ 下的单元测试会沿 engine → vision → media 触达 PIL
 Pillow>=11.1.0
 

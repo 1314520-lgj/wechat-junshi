@@ -12,6 +12,17 @@
 # 读 changelog、跑全量检查与测试，再单独提交。
 #
 # rev 都是有意的固定版本，不要图省事写成 main。
+
+# 钩子环境统一用 Python 3.12 —— 与 requirements-dev.txt / CI / 打包运行时
+# 一致。这不是「顺手固定版本」，而是必需：rapidocr-onnxruntime==1.4.4 声明
+# Requires-Python >=3.6,<3.13，若钩子环境用 3.13，pip-audit 在解析
+# requirements.txt 时会在依赖解析阶段就失败，报
+#   ERROR: Could not find a version that satisfies the requirement
+#          rapidocr-onnxruntime==1.4.4
+# 这个报错极易被误读成「包被下架了」，实际只是 Python 版本不对。
+default_language_version:
+  python: python3.12
+
 repos:
   # —— 文件卫生：与 ruff 职责不重叠，只做纯文件层面的事 ——
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -46,6 +57,24 @@ repos:
         # 也不要加 --force-exclude：ruff-pre-commit 的 entry 里已经带了它，
         # 再加一次会直接报 “cannot be used multiple times” 退出码 2。
         types_or: [python, pyi]
+
+  # —— 供应链安全：本地和 CI 扫同一份清单 ——
+  # pre-commit 官方维护的钩子，直接调用 pip-audit。
+  # 只在 requirements*.txt 变更时触发（files 限定），避免每次提交都联网。
+  - repo: https://github.com/pypa/pip-audit
+    rev: v2.10.1
+    hooks:
+      - id: pip-audit
+        # 扫清单而不是当前环境：本地 venv 里通常只装了一部分依赖，
+        # 「pip list」模式会漏掉运行时的 numpy/opencv/onnxruntime 等。
+        #
+        # 注意 --progress-spinner 的值必须引号包起来：YAML 里裸写的 off
+        # 会被解析成布尔 false，pre-commit 校验时报
+        # “Expected string got bool”。顺带一提，本钩子跑在 3.13 环境下
+        # 解析 requirements.txt 会失败，所以本地需要 3.12 的 python —— 见下。
+        args: [-r, requirements.txt, -r, requirements-dev.txt, --vulnerability-service, osv, --progress-spinner, "off"]
+        files: ^requirements.*\.txt$
+        pass_filenames: false
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 两个「本该启用、但在本机不可用」的钩子，以及为什么最终没启用

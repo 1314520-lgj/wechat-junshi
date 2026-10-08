@@ -30,6 +30,21 @@ jobs:
       - name: 安装检查工具
         run: pip install -r requirements-dev.txt
 
+      # 依赖清单里有 Requires-Python <3.13 的包（rapidocr-onnxruntime==1.4.4），
+      # 一旦 python 变成 3.13，pip-audit / pip install 都会在解析阶段失败，
+      # 而报错信息是「找不到满足条件的版本」，很容易被误读成「包没了」。
+      # 这里显式断言，把这个隐式前提变成会说话的检查。
+      - name: 断言 Python 版本
+        run: |
+          python - <<'PY'
+          import sys
+          assert sys.version_info[:2] == (3, 12), (
+              f"需要 Python 3.12（rapidocr-onnxruntime 1.4.4 不支持 3.13），"
+              f"当前为 {sys.version.split()[0]}"
+          )
+          print("Python", sys.version.split()[0], "OK")
+          PY
+
       - name: 语法编译检查
         run: python -m compileall -q engine launcher.py migrate_update.py sdk tests
 
@@ -49,6 +64,30 @@ jobs:
         run: |
           pip install pre-commit
           pre-commit run --all-files --show-diff-on-failure
+
+      # 供应链安全：检查依赖清单里有没有已知漏洞（CVE/GHSA）。
+      #
+      # 用官方 pypa/gh-action-pip-audit 而不是手写 pip install pip-audit：
+      # 它会渲染 GitHub job summary，且失败时行为一致。
+      # 版本固定到 v1.1.0 —— 与本仓库其他 action 一样，不跟 main 漂。
+      #
+      # 扫的是 requirements*.txt 而不是当前环境：这里只装了 dev 依赖，
+      # 「pip list」模式会漏掉运行时的 numpy/opencv/onnxruntime 等。
+      #
+      # 关键点（踩过的坑）：该 action **没有** python-version 输入（已核对
+      # action.yml），它用 PATH 上第一个 python，或 inputs.virtual-environment
+      # 指定的虚拟环境。而 rapidocr-onnxruntime==1.4.4 声明
+      # Requires-Python >=3.6,<3.13，在 3.13 下 pip 解析 requirements.txt
+      # 会直接失败（Could not find a version that satisfies the requirement）。
+      #
+      # 本 step 位于上面 setup-python(3.12) 之后，PATH 上的 python 已经是
+      # 3.12，因此**不要**把这一步挪到 setup-python 之前，那样会被 runner
+      # 自带的 3.13 接住并静默失败。为防日后调整顺序时踩坑，这里显式断言。
+      - name: 依赖漏洞扫描
+        uses: pypa/gh-action-pip-audit@v1.1.0
+        with:
+          inputs: requirements.txt requirements-dev.txt
+          vulnerability-service: osv
 
       # 安全规则族（S，等价于 Bandit）已并入上面的 ruff check —— pyproject 的
       # lint.select 里有 "S"，lint.ignore 里有逐条复核过的豁免理由（S603/S606/
