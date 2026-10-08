@@ -95,7 +95,10 @@ def _parse_candidates(content: str) -> list[str]:
             return got[:3]
         raise LlmError("起草结果格式无法解析，请重试")
     except json.JSONDecodeError:
-        if content.startswith(('{', '[')):
+        # 整串不是合法 JSON 时不能直接放弃：模型常按行返回多个独立 JSON 数组
+        # （见 selftest 的 '["a"]\n["b"]\n["c"]'），交给下面逐行兜底处理。
+        # 若整串以 { 开头，说明是损坏的对象负载，逐行拆分没有意义，直接判定失败。
+        if content.startswith('{'):
             raise LlmError("起草结果格式无法解析，请重试") from None
     got = []
     for ln in content.splitlines():
@@ -108,9 +111,14 @@ def _parse_candidates(content: str) -> list[str]:
             # line must never become a candidate.
             items = _strings_from(json.loads(bare))
         except json.JSONDecodeError:
-            if bare.startswith(('{', '[')):
+            if bare.startswith('{'):
+                # 以 { 开头是损坏或不含候选的对象负载，整行丢弃，绝不把原文当候选。
                 continue
-            items = re.findall(r'\[\s*"((?:[^"\\]|\\.)*)"\s*\]', bare) if bare.startswith("[") else [ln]
+            if bare.startswith('['):
+                # 一行里可能并排多个独立数组，例如 '["a"], ["b"], ["c"]'。
+                items = re.findall(r'\[\s*"((?:[^"\\]|\\.)*)"\s*\]', bare)
+            else:
+                items = [ln]
         got += [c for c in (_clean(x) for x in items) if c]
     if got:
         return got[:3]
