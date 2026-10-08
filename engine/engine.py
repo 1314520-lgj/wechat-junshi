@@ -166,16 +166,16 @@ def _analyze_impl(messages: list, relationship: str, api_key: str,
                                       style=style, thinking=thinking,
                                       guidance=guidance_text(answers) if judged else None,
                                       junshi_layer=junshi_layer, memory=memory)
-    except TimeoutError:
-        raise LlmError("预算不足，起草未完成，请稍后重试")
+    except TimeoutError as exc:
+        raise LlmError("预算不足，起草未完成，请稍后重试") from exc
     if not candidates:
         raise LlmError("起草结果没有可用候选回复")
 
     notify("checking")
     try:
         candidates = review(messages[-context:], candidates, api_key, judge, timeout, relationship=relationship, style=style,**({'reply_to':reply_to} if reply_to else {}))
-    except TimeoutError:
-        raise LlmError("预算不足，回复核验未完成，请重试")
+    except TimeoutError as exc:
+        raise LlmError("预算不足，回复核验未完成，请重试") from exc
     integrated_index=getattr(candidates,"best_index",None)
     notify("ranking")
     scores = [0.0, 0.0, 0.0]

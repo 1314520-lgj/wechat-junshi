@@ -958,7 +958,7 @@ def state_payload():
             },
             "log": list(LOG),
         }
-        return payload
+        return payload  # noqa: RET504
 
 
 def do_fill(index, edited_text=None, analysis_ts=None):

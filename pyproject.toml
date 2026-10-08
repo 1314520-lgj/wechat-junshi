@@ -21,6 +21,8 @@ select = [
   "B",   # flake8-bugbear：常见缺陷模式
   "C4",  # flake8-comprehensions
   "RUF", # Ruff 自有规则
+  "RET", # 返回值缺陷（漏 return、隐式返回 None）
+  "PIE", # 明显冗余或写错的代码
 ]
 
 ignore = [
@@ -37,7 +39,6 @@ ignore = [
   "RUF003", # 注释中的歧义 Unicode 字符
   # —— 已知问题，暂缓处理，留作后续改进（不阻塞 CI）——
   "B007",   # 循环变量未使用
-  "B904",   # except 内 raise 未用 from
   "B905",   # zip() 未指定 strict
   "RUF005", # 集合字面量拼接（[a] + [b]）
   "RUF046", # 多余的 int() 转换

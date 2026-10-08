@@ -376,9 +376,9 @@ def _review_impl(messages, candidates, api_key, model, timeout,strict=False,feed
     except ReviewFailure:
         diagnostics['failure_kind']='no_accepted_replies'
         raise
-    except (LlmError, ValueError, KeyError, TypeError):
+    except (LlmError, ValueError, KeyError, TypeError) as exc:
         diagnostics['failure_kind']=failure_kind
-        raise LlmError('回复核验未完成，请重试；本次未展示未经核验的建议')
+        raise LlmError('回复核验未完成，请重试；本次未展示未经核验的建议') from exc
     finally:
         import modelrouter
         route=modelrouter.current()

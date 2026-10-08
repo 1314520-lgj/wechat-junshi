@@ -167,6 +167,7 @@ def _entry_action(match):
     verb=match['action']
     for action,prefixes in [('install',('安装','装')),('download',('下载',)),('follow',('关注',)),('use',('使用','用')),('try',('试用','试')),('experience',('体验',)),('play',('玩',)),('open',('打开','点开','点进')),('exposure',('接触',)),('see',('见',)),('hear',('听',)),('know',('了解',))]:
         if verb.startswith(prefixes):return action
+    return None
 
 
 def _assertive_units(text):

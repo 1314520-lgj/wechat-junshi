@@ -75,7 +75,7 @@ def reserve(model,system):
 
 def reserve_request(model,cost=0,route=None,phase=None,route_id='default',local=False):
     route=route or current();check(route)
-    if not route:return
+    if not route:return None
     if isinstance(cost,bool) or not isinstance(cost,(int,float)) or not math.isfinite(cost) or cost<0:raise ValueError('费用预留无效')
     with route['budget_lock']:
         if route['calls']>=route['settings'].get('max_model_calls',6):raise TimeoutError('已达到本次模型调用上限')

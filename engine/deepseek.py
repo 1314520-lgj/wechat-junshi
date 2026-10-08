@@ -80,7 +80,7 @@ def _direct_chat(api_key, system, turns, model=DEFAULT_MODEL, temperature=1.2,
                 try:
                     data = json.loads(resp.read().decode("utf-8"))
                 except (ValueError, UnicodeDecodeError):
-                    raise LlmError("模型返回了无法解析的内容")
+                    raise LlmError("模型返回了无法解析的内容") from None
                 if not isinstance(data, dict):
                     raise LlmError("模型返回了异常结构")
                 try:
@@ -88,7 +88,7 @@ def _direct_chat(api_key, system, turns, model=DEFAULT_MODEL, temperature=1.2,
                     content = choice.get("message", {}).get("content") or ""
                     finished = choice.get("finish_reason")
                 except (AttributeError, TypeError, KeyError):
-                    raise LlmError("模型返回结构异常")
+                    raise LlmError("模型返回结构异常") from None
                 if not content or not isinstance(content, str):
                     raise LlmError("模型返回空内容")
                 if finished == "length":
@@ -103,7 +103,7 @@ def _direct_chat(api_key, system, turns, model=DEFAULT_MODEL, temperature=1.2,
                 raw = exc.read().decode("utf-8", errors="replace")
             except Exception:
                 raw = ""
-            raise LlmError(f"HTTP {exc.code}: {_redact(raw, api_key)[:300]}", exc.code)
+            raise LlmError(f"HTTP {exc.code}: {_redact(raw, api_key)[:300]}", exc.code) from exc
         except (TimeoutError, OSError) as exc:
             if attempt < attempts-1:
                 time.sleep(2 ** attempt)

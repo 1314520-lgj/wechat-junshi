@@ -96,7 +96,7 @@ def _parse_candidates(content: str) -> list[str]:
         raise LlmError("起草结果格式无法解析，请重试")
     except json.JSONDecodeError:
         if content.startswith(('{', '[')):
-            raise LlmError("起草结果格式无法解析，请重试")
+            raise LlmError("起草结果格式无法解析，请重试") from None
     got = []
     for ln in content.splitlines():
         ln = ln.strip()
